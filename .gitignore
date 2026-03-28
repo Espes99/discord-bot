@@ -3,6 +3,8 @@ obj/
 *.user
 .vs/
 .vscode/
+.claude/
+.agents/
 appsettings.json
 appsettings.*.json
 !appsettings.example.json
