@@ -4,6 +4,7 @@ public class DiscordSettings
 {
     public string Token { get; set; } = string.Empty;
     public ulong ChannelId { get; set; }
+    public ulong GuildId { get; set; }
 }
 
 public class HenrikDevSettings

@@ -40,48 +40,32 @@ public class Worker : BackgroundService
     {
         await command.DeferAsync();
 
-        var results = new List<PerformanceResult>();
-        var errors = new List<string>();
+        var name = command.Data.Options.First(o => o.Name == "name").Value.ToString()!;
+        var tag = command.Data.Options.First(o => o.Name == "tag").Value.ToString()!;
+        var player = new TrackedPlayer { Name = name, Tag = tag, Region = "eu" };
 
-        foreach (var player in _players)
+        try
         {
-            try
+            var result = await CheckPlayerAsync(player);
+            if (result is null)
             {
-                var result = await CheckPlayerAsync(player);
-                if (result is not null)
-                    results.Add(result);
+                await command.FollowupAsync($"No completed matches found for {name}#{tag}.");
+                return;
             }
-            catch (HttpRequestException ex)
-            {
-                _logger.LogWarning(ex, "API request failed for {Name}#{Tag}", player.Name, player.Tag);
-                errors.Add($"Failed to fetch data for {player.Name}#{player.Tag}");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Unexpected error checking {Name}#{Tag}", player.Name, player.Tag);
-                errors.Add($"Error checking {player.Name}#{player.Tag}");
-            }
-        }
 
-        if (results.Count == 0 && errors.Count == 0)
-        {
-            await command.FollowupAsync("No new matches found for any tracked players.");
-            return;
-        }
-
-        foreach (var result in results)
-        {
             await _discord.SendPerformanceMessageAsync(result);
+            await command.FollowupAsync($"Latest match for {name}#{tag} posted.");
         }
-
-        var summary = results.Count > 0
-            ? $"Found {results.Count} new match(es)."
-            : "No new matches found.";
-
-        if (errors.Count > 0)
-            summary += $"\n{errors.Count} error(s): {string.Join(", ", errors)}";
-
-        await command.FollowupAsync(summary);
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "API request failed for {Name}#{Tag}", name, tag);
+            await command.FollowupAsync($"Failed to fetch data for {name}#{tag}.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error checking {Name}#{Tag}", name, tag);
+            await command.FollowupAsync($"Something went wrong checking {name}#{tag}.");
+        }
     }
 
     private async Task<PerformanceResult?> CheckPlayerAsync(TrackedPlayer player)

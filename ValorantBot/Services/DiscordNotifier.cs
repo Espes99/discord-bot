@@ -43,9 +43,12 @@ public class DiscordNotifier : IAsyncDisposable
 
         var latestCommand = new SlashCommandBuilder()
             .WithName("latest")
-            .WithDescription("Check for new Valorant matches for all tracked players");
+            .WithDescription("Check the latest Valorant match for a player")
+            .AddOption("name", ApplicationCommandOptionType.String, "Player name", isRequired: true)
+            .AddOption("tag", ApplicationCommandOptionType.String, "Player tag (e.g. 1234)", isRequired: true);
 
-        await _client.CreateGlobalApplicationCommandAsync(latestCommand.Build());
+        var guild = _client.GetGuild(_settings.GuildId);
+        await guild.CreateApplicationCommandAsync(latestCommand.Build());
 
         _isReady = true;
         _readyTcs.TrySetResult();
