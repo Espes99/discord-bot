@@ -56,7 +56,7 @@ public class Worker(
             }
 
             // Pace requests to avoid HenrikDev API rate limits
-            await Task.Delay(TimeSpan.FromSeconds(3), ct);
+            await Task.Delay(TimeSpan.FromSeconds(10), ct);
         }
     }
 

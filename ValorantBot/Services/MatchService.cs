@@ -33,6 +33,9 @@ public class MatchService(
         var matchId = latest.Metadata.MatchId;
         logger.LogInformation("Latest match for {Key}: {MatchId}", playerKey, matchId);
 
+        // Pace requests to avoid HenrikDev API rate limits
+        await Task.Delay(TimeSpan.FromSeconds(2), ct);
+
         var details = await henrikDev.GetMatchDetailsAsync(matchId, player.Region, ct);
         if (details is null)
         {
