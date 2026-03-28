@@ -20,6 +20,12 @@ builder.Services
 
 builder.Services.Configure<List<TrackedPlayer>>(builder.Configuration.GetSection("TrackedPlayers"));
 
+builder.Services
+    .AddOptions<PollingSettings>()
+    .BindConfiguration("Polling")
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
 // HenrikDev typed HTTP client
 var henrikSettings = builder.Configuration.GetSection("HenrikDevValorantApi").Get<HenrikDevSettings>()
     ?? new HenrikDevSettings();
@@ -38,6 +44,7 @@ var anthropicApiKey = builder.Configuration["Anthropic:ApiKey"]
 builder.Services.AddSingleton(new AnthropicClient(anthropicApiKey));
 
 // Services
+builder.Services.AddSingleton<IMatchTracker, MatchTracker>();
 builder.Services.AddSingleton<IPerformanceAnalyzer, PerformanceAnalyzer>();
 builder.Services.AddSingleton<IMessageGenerator, MessageGenerator>();
 builder.Services.AddSingleton<IDiscordNotifier, DiscordNotifier>();

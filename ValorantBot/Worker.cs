@@ -1,15 +1,20 @@
 using Discord.WebSocket;
+using Microsoft.Extensions.Options;
 using ValorantBot.Models;
 using ValorantBot.Services;
 
 namespace ValorantBot;
 
 /// <summary>
-/// Background service that connects the Discord bot and routes slash commands.
+/// Background service that connects the Discord bot, routes slash commands,
+/// and polls tracked players for new matches.
 /// </summary>
 public class Worker(
     IDiscordNotifier discord,
+    IMatchTracker matchTracker,
     IServiceScopeFactory scopeFactory,
+    IOptions<List<TrackedPlayer>> trackedPlayersOptions,
+    IOptions<PollingSettings> pollingOptions,
     ILogger<Worker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -19,8 +24,63 @@ public class Worker(
         discord.OnLatestCommand += HandleLatestCommandAsync;
         await discord.StartAsync(stoppingToken);
 
-        // Keep the service alive
-        await Task.Delay(Timeout.Infinite, stoppingToken);
+        var interval = TimeSpan.FromSeconds(pollingOptions.Value.IntervalSeconds);
+        logger.LogInformation("Polling {Count} tracked player(s) every {Interval}s",
+            trackedPlayersOptions.Value.Count, interval.TotalSeconds);
+
+        // Check immediately on startup, then on each timer tick
+        await PollAllPlayersAsync(stoppingToken);
+
+        using var timer = new PeriodicTimer(interval);
+        while (await timer.WaitForNextTickAsync(stoppingToken))
+        {
+            await PollAllPlayersAsync(stoppingToken);
+        }
+    }
+
+    private async Task PollAllPlayersAsync(CancellationToken ct)
+    {
+        var players = trackedPlayersOptions.Value;
+        logger.LogDebug("Polling {Count} player(s) for new matches", players.Count);
+
+        foreach (var player in players)
+        {
+            try
+            {
+                await CheckPlayerForNewMatchAsync(player, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to poll {Name}#{Tag}, will retry next cycle",
+                    player.Name, player.Tag);
+            }
+
+            // Pace requests to avoid HenrikDev API rate limits
+            await Task.Delay(TimeSpan.FromSeconds(3), ct);
+        }
+    }
+
+    private async Task CheckPlayerForNewMatchAsync(TrackedPlayer player, CancellationToken ct)
+    {
+        using var scope = scopeFactory.CreateScope();
+        var matchService = scope.ServiceProvider.GetRequiredService<IMatchService>();
+
+        var result = await matchService.GetLatestPerformanceAsync(player, ct);
+        if (result is null)
+            return;
+
+        var playerKey = MatchTracker.PlayerKey(player.Name, player.Tag);
+        var matchId = result.MatchData.Metadata.MatchId;
+
+        if (!matchTracker.IsNewMatch(playerKey, matchId))
+        {
+            logger.LogDebug("No new match for {Key}", playerKey);
+            return;
+        }
+
+        logger.LogInformation("New match detected for {Key}: {MatchId}", playerKey, matchId);
+        await discord.SendPerformanceMessageAsync(result);
+        matchTracker.SetLastMatch(playerKey, matchId);
     }
 
     private async Task HandleLatestCommandAsync(SocketSlashCommand command)

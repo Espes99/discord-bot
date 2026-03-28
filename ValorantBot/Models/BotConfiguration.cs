@@ -45,3 +45,12 @@ public class TrackedPlayer
     [RegularExpression("^(eu|na|kr|ap|br|latam)$", ErrorMessage = "Region must be one of: eu, na, kr, ap, br, latam.")]
     public string Region { get; set; } = "eu";
 }
+
+/// <summary>
+/// Settings for the automatic player polling loop.
+/// </summary>
+public class PollingSettings
+{
+    [Range(10, 3600, ErrorMessage = "Polling interval must be between 10 and 3600 seconds.")]
+    public int IntervalSeconds { get; set; } = 60;
+}

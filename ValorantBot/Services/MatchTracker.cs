@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace ValorantBot.Services;
 
-public class MatchTracker
+public class MatchTracker : IMatchTracker
 {
     private readonly string _filePath;
     private readonly ILogger<MatchTracker> _logger;
