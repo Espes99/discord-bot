@@ -23,7 +23,8 @@ public class MatchService(
         }
 
         var latest = matches
-            .Where(m => m.Metadata.IsCompleted)
+            .Where(m => m.Metadata.IsCompleted
+                && m.Metadata.Queue.Name.Equals("Competitive", StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(m => m.Metadata.StartedAt)
             .FirstOrDefault();
 

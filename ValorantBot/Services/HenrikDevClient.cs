@@ -13,7 +13,7 @@ public class HenrikDevClient(HttpClient httpClient, ILogger<HenrikDevClient> log
     public async Task<List<MatchListEntry>> GetRecentMatchesAsync(
         string name, string tag, string region, CancellationToken ct = default)
     {
-        var url = $"v4/matches/{region}/pc/{Uri.EscapeDataString(name)}/{Uri.EscapeDataString(tag)}?size=5";
+        var url = $"v4/matches/{region}/pc/{Uri.EscapeDataString(name)}/{Uri.EscapeDataString(tag)}?size=5&mode=competitive";
         logger.LogDebug("Fetching match list: {Url}", url);
 
         var response = await httpClient.GetAsync(url, ct);
