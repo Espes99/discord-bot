@@ -35,7 +35,7 @@ cp ValorantBot/appsettings.example.json ValorantBot/appsettings.json
 | `HenrikDevValorantApi.ApiKey` | HenrikDev API key                                     |
 | `Anthropic.ApiKey`            | Anthropic API key                                     |
 | `TrackedPlayers`              | Array of `{ Name, Tag, Region }` for players to track |
-| `Polling.IntervalSeconds`     | Polling interval in seconds (default: 60)             |
+| `Polling.IntervalSeconds`     | Polling interval in seconds (default: 1200)           |
 
 ## Running Locally
 
