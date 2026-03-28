@@ -1,0 +1,7 @@
+**/bin
+**/obj
+.git
+.claude
+.agents
+*.md
+skills-lock.json
