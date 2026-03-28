@@ -5,16 +5,26 @@ using ValorantBot.Services;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-// Configuration bindings
-builder.Services.Configure<DiscordSettings>(builder.Configuration.GetSection("DiscordBot"));
-builder.Services.Configure<HenrikDevSettings>(builder.Configuration.GetSection("HenrikDevValorantApi"));
+// Configuration bindings with validation
+builder.Services
+    .AddOptions<DiscordSettings>()
+    .BindConfiguration("DiscordBot")
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+builder.Services
+    .AddOptions<HenrikDevSettings>()
+    .BindConfiguration("HenrikDevValorantApi")
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
 builder.Services.Configure<List<TrackedPlayer>>(builder.Configuration.GetSection("TrackedPlayers"));
 
 // HenrikDev typed HTTP client
 var henrikSettings = builder.Configuration.GetSection("HenrikDevValorantApi").Get<HenrikDevSettings>()
     ?? new HenrikDevSettings();
 
-builder.Services.AddHttpClient<HenrikDevClient>(client =>
+builder.Services.AddHttpClient<IHenrikDevClient, HenrikDevClient>(client =>
 {
     var baseUrl = henrikSettings.BaseUrl.TrimEnd('/') + "/";
     client.BaseAddress = new Uri(baseUrl);
@@ -26,10 +36,12 @@ builder.Services.AddHttpClient<HenrikDevClient>(client =>
 var anthropicApiKey = builder.Configuration["Anthropic:ApiKey"]
     ?? throw new InvalidOperationException("Anthropic:ApiKey is required in configuration");
 builder.Services.AddSingleton(new AnthropicClient(anthropicApiKey));
-builder.Services.AddSingleton<MessageGenerator>();
 
 // Services
-builder.Services.AddSingleton<DiscordNotifier>();
+builder.Services.AddSingleton<IPerformanceAnalyzer, PerformanceAnalyzer>();
+builder.Services.AddSingleton<IMessageGenerator, MessageGenerator>();
+builder.Services.AddSingleton<IDiscordNotifier, DiscordNotifier>();
+builder.Services.AddScoped<IMatchService, MatchService>();
 builder.Services.AddHostedService<Worker>();
 
 var host = builder.Build();

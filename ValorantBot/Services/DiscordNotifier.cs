@@ -5,18 +5,25 @@ using ValorantBot.Models;
 
 namespace ValorantBot.Services;
 
-public class DiscordNotifier : IAsyncDisposable
+/// <summary>
+/// Manages the Discord bot connection, slash command registration, and message posting.
+/// </summary>
+public class DiscordNotifier : IDiscordNotifier
 {
     private readonly DiscordSocketClient _client;
     private readonly DiscordSettings _settings;
-    private readonly MessageGenerator _messageGenerator;
+    private readonly IMessageGenerator _messageGenerator;
     private readonly ILogger<DiscordNotifier> _logger;
     private bool _isReady;
     private readonly TaskCompletionSource _readyTcs = new();
 
+    /// <inheritdoc />
     public event Func<SocketSlashCommand, Task>? OnLatestCommand;
 
-    public DiscordNotifier(IOptions<DiscordSettings> settings, MessageGenerator messageGenerator, ILogger<DiscordNotifier> logger)
+    public DiscordNotifier(
+        IOptions<DiscordSettings> settings,
+        IMessageGenerator messageGenerator,
+        ILogger<DiscordNotifier> logger)
     {
         _settings = settings.Value;
         _messageGenerator = messageGenerator;
@@ -66,6 +73,7 @@ public class DiscordNotifier : IAsyncDisposable
         }
     }
 
+    /// <inheritdoc />
     public async Task StartAsync(CancellationToken ct)
     {
         _logger.LogInformation("Connecting to Discord...");
@@ -84,6 +92,7 @@ public class DiscordNotifier : IAsyncDisposable
         }
     }
 
+    /// <inheritdoc />
     public async Task SendPerformanceMessageAsync(PerformanceResult result)
     {
         if (!_isReady)
@@ -136,6 +145,7 @@ public class DiscordNotifier : IAsyncDisposable
             .Build();
     }
 
+    /// <inheritdoc />
     public async Task StopAsync()
     {
         if (_client.LoginState == LoginState.LoggedIn)
@@ -145,6 +155,7 @@ public class DiscordNotifier : IAsyncDisposable
         }
     }
 
+    /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
         await StopAsync();

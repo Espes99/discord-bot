@@ -2,9 +2,13 @@ using ValorantBot.Models;
 
 namespace ValorantBot.Services;
 
-public static class PerformanceAnalyzer
+/// <summary>
+/// Analyzes a player's match performance based on KDA, ACS, and headshot percentage.
+/// </summary>
+public class PerformanceAnalyzer : IPerformanceAnalyzer
 {
-    public static PerformanceResult Analyze(
+    /// <inheritdoc />
+    public PerformanceResult Analyze(
         TrackedPlayer player, MatchPlayer matchPlayer, MatchDetailData matchData)
     {
         var stats = matchPlayer.Stats;

@@ -4,13 +4,13 @@ using ValorantBot.Models;
 
 namespace ValorantBot.Services;
 
-public class MessageGenerator
+/// <summary>
+/// Generates AI-powered Discord messages using Claude Haiku, with static fallbacks.
+/// </summary>
+public class MessageGenerator(AnthropicClient client, ILogger<MessageGenerator> logger) : IMessageGenerator
 {
-    private readonly AnthropicClient _client;
-    private readonly ILogger<MessageGenerator> _logger;
-
     private const string SystemPrompt = """
-        You are a toxic but funny Discord bot that roasts Valorant players based on their match stats. Important to use "valurant" accent. 
+        You are a toxic but funny Discord bot that roasts Valorant players based on their match stats. Important to use "valurant" accent.
 
         Rules:
         - Keep messages short (1-3 sentences max)
@@ -23,12 +23,7 @@ public class MessageGenerator
         - Do NOT use any prefix or label. Just output the message directly.
         """;
 
-    public MessageGenerator(AnthropicClient client, ILogger<MessageGenerator> logger)
-    {
-        _client = client;
-        _logger = logger;
-    }
-
+    /// <inheritdoc />
     public async Task<string> GenerateMessageAsync(PerformanceResult result)
     {
         var stats = result.MatchPlayer.Stats;
@@ -56,18 +51,18 @@ public class MessageGenerator
                 Messages = [new Message(RoleType.User, prompt)]
             };
 
-            var response = await _client.Messages.GetClaudeMessageAsync(parameters);
+            var response = await client.Messages.GetClaudeMessageAsync(parameters);
             var text = response.Content.FirstOrDefault()?.ToString()?.Trim();
 
             if (!string.IsNullOrEmpty(text))
             {
-                _logger.LogDebug("Generated message for {Player}: {Message}", result.MatchPlayer.Name, text);
+                logger.LogDebug("Generated message for {Player}: {Message}", result.MatchPlayer.Name, text);
                 return text;
             }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to generate AI message, using fallback");
+            logger.LogWarning(ex, "Failed to generate AI message, using fallback");
         }
 
         return GetFallbackMessage(result);
