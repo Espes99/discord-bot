@@ -4,4 +4,4 @@ services:
     container_name: valorant-bot
     restart: unless-stopped
     volumes:
-      - ./appsettings.json:/app/appsettings.json:ro
+      - ./ValorantBot/appsettings.json:/app/appsettings.json:ro
