@@ -19,9 +19,15 @@ public interface IDiscordNotifier : IAsyncDisposable
     Task StartAsync(CancellationToken ct);
 
     /// <summary>
-    /// Sends a performance message with an embed to the configured channel.
+    /// Waits until the Discord client is fully connected and ready.
     /// </summary>
-    Task SendPerformanceMessageAsync(PerformanceResult result);
+    Task WaitUntilReadyAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Sends a performance message with an embed to the configured channel.
+    /// Returns true if the message was sent, false if skipped.
+    /// </summary>
+    Task<bool> SendPerformanceMessageAsync(PerformanceResult result);
 
     /// <summary>
     /// Disconnects the bot from Discord.

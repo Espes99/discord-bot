@@ -27,8 +27,6 @@ public class HenrikDevClient(HttpClient httpClient, ILogger<HenrikDevClient> log
         response.EnsureSuccessStatusCode();
 
         var body = await response.Content.ReadAsStringAsync(ct);
-        logger.LogDebug("Match list response ({StatusCode}): {Body}", response.StatusCode, body);
-
         var result = JsonSerializer.Deserialize<MatchListResponse>(body);
         logger.LogDebug("Deserialized {Count} match(es) for {Name}#{Tag}",
             result?.Data?.Count ?? 0, name, tag);
@@ -54,8 +52,6 @@ public class HenrikDevClient(HttpClient httpClient, ILogger<HenrikDevClient> log
         response.EnsureSuccessStatusCode();
 
         var body = await response.Content.ReadAsStringAsync(ct);
-        logger.LogDebug("Match detail response ({StatusCode}): {Body}", response.StatusCode, body);
-
         var result = JsonSerializer.Deserialize<MatchDetailResponse>(body);
         logger.LogDebug("Deserialized match {MatchId}: {PlayerCount} players, {TeamCount} teams",
             matchId, result?.Data?.Players?.Count ?? 0, result?.Data?.Teams?.Count ?? 0);

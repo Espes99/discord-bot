@@ -23,6 +23,7 @@ public class Worker(
 
         discord.OnLatestCommand += HandleLatestCommandAsync;
         await discord.StartAsync(stoppingToken);
+        await discord.WaitUntilReadyAsync(stoppingToken);
 
         var interval = TimeSpan.FromSeconds(pollingOptions.Value.IntervalSeconds);
         logger.LogInformation("Polling {Count} tracked player(s) every {Interval}s",
@@ -74,13 +75,14 @@ public class Worker(
 
         if (!matchTracker.IsNewMatch(playerKey, matchId))
         {
-            logger.LogDebug("No new match for {Key}", playerKey);
+            logger.LogInformation("Already seen match {MatchId} for {Key}, skipping", matchId, playerKey);
             return;
         }
 
         logger.LogInformation("New match detected for {Key}: {MatchId}", playerKey, matchId);
-        await discord.SendPerformanceMessageAsync(result);
-        matchTracker.SetLastMatch(playerKey, matchId);
+        var sent = await discord.SendPerformanceMessageAsync(result);
+        if (sent)
+            matchTracker.SetLastMatch(playerKey, matchId);
     }
 
     private async Task HandleLatestCommandAsync(SocketSlashCommand command)

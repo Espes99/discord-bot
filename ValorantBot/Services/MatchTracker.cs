@@ -14,6 +14,7 @@ public class MatchTracker : IMatchTracker
         var dataDir = Path.Combine(AppContext.BaseDirectory, "data");
         Directory.CreateDirectory(dataDir);
         _filePath = Path.Combine(dataDir, "last_matches.json");
+        logger.LogInformation("Match tracker using path: {Path} (BaseDirectory: {BaseDir})", _filePath, AppContext.BaseDirectory);
         Load();
     }
 
@@ -35,14 +36,19 @@ public class MatchTracker : IMatchTracker
 
     private void Load()
     {
+        _logger.LogInformation("Match tracker file path: {Path}", _filePath);
+
         if (!File.Exists(_filePath))
+        {
+            _logger.LogInformation("No existing match tracker file found, starting fresh");
             return;
+        }
 
         try
         {
             var json = File.ReadAllText(_filePath);
             _lastMatchIds = JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new();
-            _logger.LogDebug("Loaded {Count} tracked match IDs", _lastMatchIds.Count);
+            _logger.LogInformation("Loaded {Count} tracked match IDs from disk", _lastMatchIds.Count);
         }
         catch (Exception ex)
         {

@@ -55,6 +55,13 @@ public class DiscordNotifier : IDiscordNotifier
             .AddOption("tag", ApplicationCommandOptionType.String, "Player tag (e.g. 1234)", isRequired: true);
 
         var guild = _client.GetGuild(_settings.GuildId);
+        if (guild is null)
+        {
+            _logger.LogError("Guild {GuildId} not found — check DiscordBot:GuildId in config", _settings.GuildId);
+            _readyTcs.TrySetResult();
+            return;
+        }
+
         await guild.CreateApplicationCommandAsync(latestCommand.Build());
 
         _isReady = true;
@@ -93,19 +100,22 @@ public class DiscordNotifier : IDiscordNotifier
     }
 
     /// <inheritdoc />
-    public async Task SendPerformanceMessageAsync(PerformanceResult result)
+    public Task WaitUntilReadyAsync(CancellationToken ct) => _readyTcs.Task.WaitAsync(ct);
+
+    /// <inheritdoc />
+    public async Task<bool> SendPerformanceMessageAsync(PerformanceResult result)
     {
         if (!_isReady)
         {
             _logger.LogWarning("Discord client not ready, skipping message");
-            return;
+            return false;
         }
 
         var channel = _client.GetChannel(_settings.ChannelId) as IMessageChannel;
         if (channel is null)
         {
             _logger.LogError("Could not find channel {ChannelId}", _settings.ChannelId);
-            return;
+            return false;
         }
 
         var message = await _messageGenerator.GenerateMessageAsync(result);
@@ -114,6 +124,7 @@ public class DiscordNotifier : IDiscordNotifier
         await channel.SendMessageAsync(text: message, embed: embed);
         _logger.LogInformation("Sent {Rating} message for {Player} to Discord",
             result.Rating, result.Player.Name);
+        return true;
     }
 
     private static Embed BuildEmbed(PerformanceResult result)
