@@ -127,6 +127,31 @@ public class DiscordNotifier : IDiscordNotifier
         return true;
     }
 
+    /// <inheritdoc />
+    public async Task<bool> SendSquadMessageAsync(List<PerformanceResult> results)
+    {
+        if (!_isReady)
+        {
+            _logger.LogWarning("Discord client not ready, skipping squad message");
+            return false;
+        }
+
+        var channel = _client.GetChannel(_settings.ChannelId) as IMessageChannel;
+        if (channel is null)
+        {
+            _logger.LogError("Could not find channel {ChannelId}", _settings.ChannelId);
+            return false;
+        }
+
+        var message = await _messageGenerator.GenerateSquadMessageAsync(results);
+        var embeds = results.Select(BuildEmbed).ToArray();
+        await channel.SendMessageAsync(text: message, embeds: embeds);
+
+        var names = string.Join(", ", results.Select(r => r.Player.Name));
+        _logger.LogInformation("Sent squad message for [{Players}] to Discord", names);
+        return true;
+    }
+
     private static Embed BuildEmbed(PerformanceResult result)
     {
         var stats = result.MatchPlayer.Stats;

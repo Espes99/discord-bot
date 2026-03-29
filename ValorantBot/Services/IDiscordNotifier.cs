@@ -30,6 +30,11 @@ public interface IDiscordNotifier : IAsyncDisposable
     Task<bool> SendPerformanceMessageAsync(PerformanceResult result);
 
     /// <summary>
+    /// Sends a squad roast message with individual embeds when players queued together.
+    /// </summary>
+    Task<bool> SendSquadMessageAsync(List<PerformanceResult> results);
+
+    /// <summary>
     /// Disconnects the bot from Discord.
     /// </summary>
     Task StopAsync();

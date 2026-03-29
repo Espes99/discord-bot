@@ -44,11 +44,16 @@ public class Worker(
         var players = trackedPlayersOptions.Value;
         logger.LogDebug("Polling {Count} player(s) for new matches", players.Count);
 
+        // Collect all new results first so we can detect stacks
+        var newResults = new List<PerformanceResult>();
+
         foreach (var player in players)
         {
             try
             {
-                await CheckPlayerForNewMatchAsync(player, ct);
+                var result = await GetNewMatchResultAsync(player, ct);
+                if (result is not null)
+                    newResults.Add(result);
             }
             catch (Exception ex)
             {
@@ -59,16 +64,56 @@ public class Worker(
             // Pace requests to avoid HenrikDev API rate limits
             await Task.Delay(TimeSpan.FromSeconds(10), ct);
         }
+
+        if (newResults.Count == 0)
+            return;
+
+        // Group by match + team to detect stacks
+        var squads = newResults
+            .GroupBy(r => (MatchId: r.MatchData.Metadata.MatchId, TeamId: r.MatchPlayer.TeamId))
+            .ToList();
+
+        var handledResults = new HashSet<PerformanceResult>();
+
+        foreach (var squad in squads.Where(g => g.Count() >= 2))
+        {
+            var members = squad.ToList();
+            var names = string.Join(", ", members.Select(r => r.Player.Name));
+            logger.LogInformation("Stack detected! [{Players}] on same team in match {MatchId}",
+                names, squad.Key.MatchId);
+
+            var sent = await discord.SendSquadMessageAsync(members);
+            if (sent)
+            {
+                foreach (var result in members)
+                {
+                    var playerKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
+                    matchTracker.SetLastMatch(playerKey, result.MatchData.Metadata.MatchId);
+                    handledResults.Add(result);
+                }
+            }
+        }
+
+        // Send individual messages for solo players
+        foreach (var result in newResults.Where(r => !handledResults.Contains(r)))
+        {
+            var sent = await discord.SendPerformanceMessageAsync(result);
+            if (sent)
+            {
+                var playerKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
+                matchTracker.SetLastMatch(playerKey, result.MatchData.Metadata.MatchId);
+            }
+        }
     }
 
-    private async Task CheckPlayerForNewMatchAsync(TrackedPlayer player, CancellationToken ct)
+    private async Task<PerformanceResult?> GetNewMatchResultAsync(TrackedPlayer player, CancellationToken ct)
     {
         using var scope = scopeFactory.CreateScope();
         var matchService = scope.ServiceProvider.GetRequiredService<IMatchService>();
 
         var result = await matchService.GetLatestPerformanceAsync(player, ct);
         if (result is null)
-            return;
+            return null;
 
         var playerKey = MatchTracker.PlayerKey(player.Name, player.Tag);
         var matchId = result.MatchData.Metadata.MatchId;
@@ -76,13 +121,11 @@ public class Worker(
         if (!matchTracker.IsNewMatch(playerKey, matchId))
         {
             logger.LogInformation("Already seen match {MatchId} for {Key}, skipping", matchId, playerKey);
-            return;
+            return null;
         }
 
         logger.LogInformation("New match detected for {Key}: {MatchId}", playerKey, matchId);
-        var sent = await discord.SendPerformanceMessageAsync(result);
-        if (sent)
-            matchTracker.SetLastMatch(playerKey, matchId);
+        return result;
     }
 
     private async Task HandleLatestCommandAsync(SocketSlashCommand command)
