@@ -9,6 +9,9 @@ namespace ValorantBot.Services;
 /// </summary>
 public class HenrikDevClient(HttpClient httpClient, ILogger<HenrikDevClient> logger) : IHenrikDevClient
 {
+    private const int MaxRetries = 3;
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(2);
+
     /// <inheritdoc />
     public async Task<List<MatchListEntry>> GetRecentMatchesAsync(
         string name, string tag, string region, CancellationToken ct = default)
@@ -16,7 +19,9 @@ public class HenrikDevClient(HttpClient httpClient, ILogger<HenrikDevClient> log
         var url = $"v4/matches/{region}/pc/{Uri.EscapeDataString(name)}/{Uri.EscapeDataString(tag)}?size=5&mode=competitive";
         logger.LogDebug("Fetching match list: {Url}", url);
 
-        var response = await httpClient.GetAsync(url, ct);
+        var response = await SendWithRetryAsync(url, ct);
+        if (response is null)
+            return [];
 
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
@@ -41,7 +46,9 @@ public class HenrikDevClient(HttpClient httpClient, ILogger<HenrikDevClient> log
         var url = $"v4/match/{region}/{matchId}";
         logger.LogDebug("Fetching match details: {Url}", url);
 
-        var response = await httpClient.GetAsync(url, ct);
+        var response = await SendWithRetryAsync(url, ct);
+        if (response is null)
+            return null;
 
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
@@ -57,5 +64,29 @@ public class HenrikDevClient(HttpClient httpClient, ILogger<HenrikDevClient> log
             matchId, result?.Data?.Players?.Count ?? 0, result?.Data?.Teams?.Count ?? 0);
 
         return result?.Data;
+    }
+
+    private async Task<HttpResponseMessage?> SendWithRetryAsync(string url, CancellationToken ct)
+    {
+        for (var attempt = 1; attempt <= MaxRetries; attempt++)
+        {
+            try
+            {
+                var response = await httpClient.GetAsync(url, ct);
+                return response;
+            }
+            catch (HttpRequestException ex)
+            {
+                logger.LogWarning(ex, "Request to {Url} failed (attempt {Attempt}/{MaxRetries})", url, attempt, MaxRetries);
+                if (attempt == MaxRetries)
+                {
+                    logger.LogError("All {MaxRetries} attempts to {Url} failed, skipping", MaxRetries, url);
+                    return null;
+                }
+                await Task.Delay(RetryDelay, ct);
+            }
+        }
+
+        return null;
     }
 }
