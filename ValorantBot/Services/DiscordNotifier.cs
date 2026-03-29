@@ -20,13 +20,17 @@ public class DiscordNotifier : IDiscordNotifier
     /// <inheritdoc />
     public event Func<SocketSlashCommand, Task>? OnLatestCommand;
 
+    private readonly IMatchHistoryStore _historyStore;
+
     public DiscordNotifier(
         IOptions<DiscordSettings> settings,
         IMessageGenerator messageGenerator,
+        IMatchHistoryStore historyStore,
         ILogger<DiscordNotifier> logger)
     {
         _settings = settings.Value;
         _messageGenerator = messageGenerator;
+        _historyStore = historyStore;
         _logger = logger;
 
         _client = new DiscordSocketClient(new DiscordSocketConfig
@@ -118,7 +122,9 @@ public class DiscordNotifier : IDiscordNotifier
             return false;
         }
 
-        var message = await _messageGenerator.GenerateMessageAsync(result);
+        var playerKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
+        var history = HistorySummarizer.Summarize(_historyStore.GetHistory(playerKey));
+        var message = await _messageGenerator.GenerateMessageAsync(result, history);
         var embed = BuildEmbed(result);
 
         await channel.SendMessageAsync(text: message, embed: embed);
@@ -143,7 +149,13 @@ public class DiscordNotifier : IDiscordNotifier
             return false;
         }
 
-        var message = await _messageGenerator.GenerateSquadMessageAsync(results);
+        var histories = results
+            .Select(r => (Key: MatchTracker.PlayerKey(r.Player.Name, r.Player.Tag), Result: r))
+            .Select(x => (x.Key, Summary: HistorySummarizer.Summarize(_historyStore.GetHistory(x.Key))))
+            .Where(x => x.Summary is not null)
+            .ToDictionary(x => x.Key, x => x.Summary!);
+
+        var message = await _messageGenerator.GenerateSquadMessageAsync(results, histories.Count > 0 ? histories : null);
         var embeds = results.Select(BuildEmbed).ToArray();
         await channel.SendMessageAsync(text: message, embeds: embeds);
 

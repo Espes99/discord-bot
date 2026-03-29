@@ -12,6 +12,7 @@ namespace ValorantBot;
 public class Worker(
     IDiscordNotifier discord,
     IMatchTracker matchTracker,
+    IMatchHistoryStore matchHistoryStore,
     IServiceScopeFactory scopeFactory,
     IOptions<List<TrackedPlayer>> trackedPlayersOptions,
     IOptions<PollingSettings> pollingOptions,
@@ -89,6 +90,7 @@ public class Worker(
                 {
                     var playerKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
                     matchTracker.SetLastMatch(playerKey, result.MatchData.Metadata.MatchId);
+                    matchHistoryStore.AddMatch(playerKey, MatchHistoryEntry.FromPerformanceResult(result));
                     handledResults.Add(result);
                 }
             }
@@ -102,6 +104,7 @@ public class Worker(
             {
                 var playerKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
                 matchTracker.SetLastMatch(playerKey, result.MatchData.Metadata.MatchId);
+                matchHistoryStore.AddMatch(playerKey, MatchHistoryEntry.FromPerformanceResult(result));
             }
         }
     }

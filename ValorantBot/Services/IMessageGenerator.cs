@@ -12,12 +12,13 @@ public interface IMessageGenerator
     /// </summary>
     /// <param name="result">The player's performance result.</param>
     /// <returns>A formatted Discord message string.</returns>
-    Task<string> GenerateMessageAsync(PerformanceResult result);
+    Task<string> GenerateMessageAsync(PerformanceResult result, PlayerHistorySummary? history = null);
 
     /// <summary>
     /// Generates a squad roast message when multiple tracked players queued together.
     /// </summary>
     /// <param name="results">Performance results for the squad members (same match, same team).</param>
+    /// <param name="histories">Optional history summaries keyed by player name#tag.</param>
     /// <returns>A formatted Discord message roasting the whole squad.</returns>
-    Task<string> GenerateSquadMessageAsync(List<PerformanceResult> results);
+    Task<string> GenerateSquadMessageAsync(List<PerformanceResult> results, Dictionary<string, PlayerHistorySummary>? histories = null);
 }
