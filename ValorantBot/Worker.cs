@@ -74,8 +74,22 @@ public class Worker(
             .GroupBy(r => (MatchId: r.MatchData.Metadata.MatchId, TeamId: r.MatchPlayer.TeamId))
             .ToList();
 
-        var handledResults = new HashSet<PerformanceResult>();
+        var squadResults = new HashSet<PerformanceResult>(
+            squads.Where(g => g.Count() >= 2).SelectMany(g => g));
 
+        // Send individual messages first, before squad messages
+        foreach (var result in newResults.Where(r => !squadResults.Contains(r)))
+        {
+            var sent = await discord.SendPerformanceMessageAsync(result);
+            if (sent)
+            {
+                var playerKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
+                matchTracker.SetLastMatch(playerKey, result.MatchData.Metadata.MatchId);
+                matchHistoryStore.AddMatch(playerKey, MatchHistoryEntry.FromPerformanceResult(result));
+            }
+        }
+
+        // Then send squad messages for stacked players
         foreach (var squad in squads.Where(g => g.Count() >= 2))
         {
             var members = squad.ToList();
@@ -91,20 +105,7 @@ public class Worker(
                     var playerKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
                     matchTracker.SetLastMatch(playerKey, result.MatchData.Metadata.MatchId);
                     matchHistoryStore.AddMatch(playerKey, MatchHistoryEntry.FromPerformanceResult(result));
-                    handledResults.Add(result);
                 }
-            }
-        }
-
-        // Send individual messages for solo players
-        foreach (var result in newResults.Where(r => !handledResults.Contains(r)))
-        {
-            var sent = await discord.SendPerformanceMessageAsync(result);
-            if (sent)
-            {
-                var playerKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
-                matchTracker.SetLastMatch(playerKey, result.MatchData.Metadata.MatchId);
-                matchHistoryStore.AddMatch(playerKey, MatchHistoryEntry.FromPerformanceResult(result));
             }
         }
     }
