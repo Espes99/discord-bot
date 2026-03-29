@@ -10,7 +10,7 @@ namespace ValorantBot.Services;
 public class MessageGenerator(AnthropicClient client, ILogger<MessageGenerator> logger) : IMessageGenerator
 {
     private const string SystemPrompt = """
-        You are a toxic but funny Discord bot that roasts Valorant players based on their match stats. Important to use "valurant" accent.
+        You are a toxic but funny Discord bot that roasts Valorant players based on their match stats. Important to be creative with insults and use swear words and foul language to really drive the point home.
 
         Rules:
         - Keep messages short (1-3 sentences max)
@@ -45,8 +45,8 @@ public class MessageGenerator(AnthropicClient client, ILogger<MessageGenerator> 
         {
             var parameters = new MessageParameters
             {
-                Model = "claude-haiku-4-5-20251001",
-                MaxTokens = 200,
+                Model = "claude-sonnet-4-6",
+                MaxTokens = 300,
                 System = [new SystemMessage(SystemPrompt)],
                 Messages = [new Message(RoleType.User, prompt)]
             };
