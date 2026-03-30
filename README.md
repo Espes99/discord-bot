@@ -21,8 +21,17 @@ Players can also trigger a check on-demand using the `/latest <name> <tag>` slas
 - **Duplicate prevention** - tracks the last seen match ID per player in `data/last_matches.json` to avoid re-posting
 - **Performance ratings** - point-based system across KDA, ACS, and HS% producing five tiers: Terrible, Bad, Average, Good, Excellent
 - **AI-powered roasts** - Claude Sonnet generates personalized messages using player stats, history trends, and agent/map context; falls back to static templates if the API is unavailable
+- **Rank change detection** - detects promotions and demotions between matches, generates dedicated AI messages for tier changes (e.g. Silver to Gold)
 - **Retry logic** - HenrikDev API calls retry up to 3 times with 2-second backoff on failure
 - **Rate limiting** - 10-second delay between player API requests, 2-second delay between individual API calls
+
+## Slash Commands
+
+| Command                | Description                                                                                                                                       |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/latest <name> <tag>` | On-demand lookup of the latest competitive match for any player. Returns an AI-generated message and a stats embed.                               |
+| `/status`              | Bot dashboard showing uptime, polling interval, last/next poll times, and per-player stats (last match, history summary, agents played, streaks). |
+| `/ranks`               | Ranked leaderboard for all tracked players, sorted by tier and RR. Shows promotion/demotion indicators.                                           |
 
 ## Prerequisites
 
@@ -82,4 +91,29 @@ View logs:
 
 ```bash
 docker logs -f valorant-bot
+```
+
+## Deploying to Fly.io
+
+The project includes a `fly.toml` configured for Fly.io deployment.
+
+```bash
+fly deploy
+```
+
+Set secrets for API keys and configuration:
+
+```bash
+fly secrets set DiscordBot__Token="..."
+fly secrets set DiscordBot__ChannelId="..."
+fly secrets set DiscordBot__GuildId="..."
+fly secrets set HenrikDevValorantApi__ApiKey="..."
+fly secrets set Anthropic__ApiKey="..."
+fly secrets set Polling__IntervalSeconds=1200
+```
+
+Data is persisted via a Fly volume mounted at `/data`. Create it before the first deploy:
+
+```bash
+fly volumes create bot_data --region lhr --size 1
 ```
