@@ -19,6 +19,7 @@ builder.Services
     .ValidateOnStart();
 
 builder.Services.Configure<List<TrackedPlayer>>(builder.Configuration.GetSection("TrackedPlayers"));
+builder.Services.Configure<BotAdminSettings>(builder.Configuration.GetSection("BotAdmin"));
 
 builder.Services
     .AddOptions<PollingSettings>()
@@ -46,6 +47,7 @@ builder.Services.AddSingleton(new AnthropicClient(anthropicApiKey));
 // Services
 builder.Services.AddSingleton<IMatchTracker, MatchTracker>();
 builder.Services.AddSingleton<IMatchHistoryStore, MatchHistoryStore>();
+builder.Services.AddSingleton<ITrackedPlayerStore, TrackedPlayerStore>();
 builder.Services.AddSingleton<IPollStateStore, PollStateStore>();
 builder.Services.AddSingleton<IPerformanceAnalyzer, PerformanceAnalyzer>();
 builder.Services.AddSingleton<IMessageGenerator, MessageGenerator>();

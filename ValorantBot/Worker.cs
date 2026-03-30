@@ -18,6 +18,8 @@ public class Worker(
     IServiceScopeFactory scopeFactory,
     IOptions<List<TrackedPlayer>> trackedPlayersOptions,
     IOptions<PollingSettings> pollingOptions,
+    IOptions<BotAdminSettings> botAdminOptions,
+    ITrackedPlayerStore trackedPlayerStore,
     ILogger<Worker> logger) : BackgroundService
 {
     private readonly DateTimeOffset _startedAt = DateTimeOffset.UtcNow;
@@ -31,12 +33,20 @@ public class Worker(
         discord.OnLatestMatchCommand += HandleLatestMatchCommandAsync;
         discord.OnStatusCommand += HandleStatusCommandAsync;
         discord.OnRanksCommand += HandleRanksCommandAsync;
+        discord.OnTrackCommand += HandleTrackCommandAsync;
+        discord.OnUntrackCommand += HandleUntrackCommandAsync;
         await discord.StartAsync(stoppingToken);
         await discord.WaitUntilReadyAsync(stoppingToken);
 
+        // Seed tracked players from config into the persistent store
+        var seedPlayers = trackedPlayersOptions.Value;
+        var seeded = seedPlayers.Count(p => trackedPlayerStore.Add(p));
+        if (seeded > 0)
+            logger.LogInformation("Seeded {Count} player(s) from config into tracked player store", seeded);
+
         var interval = TimeSpan.FromSeconds(pollingOptions.Value.IntervalSeconds);
         logger.LogInformation("Polling {Count} tracked player(s) every {Interval}s",
-            trackedPlayersOptions.Value.Count, interval.TotalSeconds);
+            trackedPlayerStore.GetAll().Count, interval.TotalSeconds);
 
         // Check if enough time has passed since the last persisted poll
         var lastPersistedPoll = pollStateStore.GetLastPollAt();
@@ -81,7 +91,7 @@ public class Worker(
     {
         _lastPollAt = DateTimeOffset.UtcNow;
         pollStateStore.SetLastPollAt(_lastPollAt.Value);
-        var players = trackedPlayersOptions.Value;
+        var players = trackedPlayerStore.GetAll();
         logger.LogDebug("Polling {Count} player(s) for new matches", players.Count);
 
         // Collect all new results first so we can detect stacks
@@ -277,13 +287,71 @@ public class Worker(
         }
     }
 
+    private bool IsAuthorized(SocketSlashCommand command) =>
+        botAdminOptions.Value.AllowedUserIds.Contains(command.User.Id);
+
+    private async Task HandleTrackCommandAsync(SocketSlashCommand command)
+    {
+        await command.DeferAsync(ephemeral: true);
+
+        if (!IsAuthorized(command))
+        {
+            await command.FollowupAsync("You don't have permission to use this command.", ephemeral: true);
+            return;
+        }
+
+        var name = command.Data.Options.First(o => o.Name == "name").Value.ToString()!;
+        var tag = command.Data.Options.First(o => o.Name == "tag").Value.ToString()!;
+        var regionOption = command.Data.Options.FirstOrDefault(o => o.Name == "region");
+        var region = regionOption?.Value?.ToString() ?? "eu";
+
+        var player = new TrackedPlayer { Name = name, Tag = tag, Region = region };
+        var added = trackedPlayerStore.Add(player);
+
+        if (!added)
+        {
+            await command.FollowupAsync($"**{name}#{tag}** is already being tracked.", ephemeral: true);
+            return;
+        }
+
+        logger.LogInformation("{User} added tracked player {Name}#{Tag} ({Region})",
+            command.User.Username, name, tag, region);
+        await command.FollowupAsync($"Now tracking **{name}#{tag}** ({region}).", ephemeral: true);
+    }
+
+    private async Task HandleUntrackCommandAsync(SocketSlashCommand command)
+    {
+        await command.DeferAsync(ephemeral: true);
+
+        if (!IsAuthorized(command))
+        {
+            await command.FollowupAsync("You don't have permission to use this command.", ephemeral: true);
+            return;
+        }
+
+        var name = command.Data.Options.First(o => o.Name == "name").Value.ToString()!;
+        var tag = command.Data.Options.First(o => o.Name == "tag").Value.ToString()!;
+
+        var removed = trackedPlayerStore.Remove(name, tag);
+
+        if (!removed)
+        {
+            await command.FollowupAsync($"**{name}#{tag}** is not currently tracked.", ephemeral: true);
+            return;
+        }
+
+        logger.LogInformation("{User} removed tracked player {Name}#{Tag}",
+            command.User.Username, name, tag);
+        await command.FollowupAsync($"Stopped tracking **{name}#{tag}**.", ephemeral: true);
+    }
+
     private async Task HandleStatusCommandAsync(SocketSlashCommand command)
     {
         await command.DeferAsync(ephemeral: true);
 
         try
         {
-            var players = trackedPlayersOptions.Value;
+            var players = trackedPlayerStore.GetAll();
             var uptime = DateTimeOffset.UtcNow - _startedAt;
             var interval = pollingOptions.Value.IntervalSeconds;
 
@@ -374,7 +442,7 @@ public class Worker(
 
         try
         {
-            var players = trackedPlayersOptions.Value;
+            var players = trackedPlayerStore.GetAll();
             if (players.Count == 0)
             {
                 await command.FollowupAsync("No tracked players configured.");

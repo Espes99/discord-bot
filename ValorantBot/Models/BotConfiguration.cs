@@ -54,3 +54,11 @@ public class PollingSettings
     [Range(10, 3600, ErrorMessage = "Polling interval must be between 10 and 3600 seconds.")]
     public int IntervalSeconds { get; set; } = 60;
 }
+
+/// <summary>
+/// Discord user IDs allowed to run admin bot commands (e.g. /track, /untrack).
+/// </summary>
+public class BotAdminSettings
+{
+    public List<ulong> AllowedUserIds { get; set; } = [];
+}

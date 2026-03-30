@@ -26,6 +26,12 @@ public class DiscordNotifier : IDiscordNotifier
     /// <inheritdoc />
     public event Func<SocketSlashCommand, Task>? OnRanksCommand;
 
+    /// <inheritdoc />
+    public event Func<SocketSlashCommand, Task>? OnTrackCommand;
+
+    /// <inheritdoc />
+    public event Func<SocketSlashCommand, Task>? OnUntrackCommand;
+
     private readonly IMatchHistoryStore _historyStore;
 
     public DiscordNotifier(
@@ -72,6 +78,19 @@ public class DiscordNotifier : IDiscordNotifier
             .WithName("ranks")
             .WithDescription("Show tracked players ranked by current rank and RR");
 
+        var trackCommand = new SlashCommandBuilder()
+            .WithName("track")
+            .WithDescription("Start tracking a Valorant player")
+            .AddOption("name", ApplicationCommandOptionType.String, "Player name", isRequired: true)
+            .AddOption("tag", ApplicationCommandOptionType.String, "Player tag (e.g. 1234)", isRequired: true)
+            .AddOption("region", ApplicationCommandOptionType.String, "Region (eu/na/kr/ap/br/latam)", isRequired: false);
+
+        var untrackCommand = new SlashCommandBuilder()
+            .WithName("untrack")
+            .WithDescription("Stop tracking a Valorant player")
+            .AddOption("name", ApplicationCommandOptionType.String, "Player name", isRequired: true)
+            .AddOption("tag", ApplicationCommandOptionType.String, "Player tag (e.g. 1234)", isRequired: true);
+
         var guild = _client.GetGuild(_settings.GuildId);
         if (guild is null)
         {
@@ -83,7 +102,9 @@ public class DiscordNotifier : IDiscordNotifier
         await guild.BulkOverwriteApplicationCommandAsync([
             latestCommand.Build(),
             statusCommand.Build(),
-            ranksCommand.Build()
+            ranksCommand.Build(),
+            trackCommand.Build(),
+            untrackCommand.Build()
         ]);
 
         _isReady = true;
@@ -112,6 +133,20 @@ public class DiscordNotifier : IDiscordNotifier
             case "ranks":
                 if (OnRanksCommand is not null)
                     await OnRanksCommand.Invoke(command);
+                else
+                    await command.RespondAsync("Bot is not fully initialized yet.");
+                break;
+
+            case "track":
+                if (OnTrackCommand is not null)
+                    await OnTrackCommand.Invoke(command);
+                else
+                    await command.RespondAsync("Bot is not fully initialized yet.");
+                break;
+
+            case "untrack":
+                if (OnUntrackCommand is not null)
+                    await OnUntrackCommand.Invoke(command);
                 else
                     await command.RespondAsync("Bot is not fully initialized yet.");
                 break;

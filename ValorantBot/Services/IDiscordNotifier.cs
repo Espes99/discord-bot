@@ -24,6 +24,16 @@ public interface IDiscordNotifier : IAsyncDisposable
     event Func<SocketSlashCommand, Task>? OnRanksCommand;
 
     /// <summary>
+    /// Raised when a user invokes the /track slash command.
+    /// </summary>
+    event Func<SocketSlashCommand, Task>? OnTrackCommand;
+
+    /// <summary>
+    /// Raised when a user invokes the /untrack slash command.
+    /// </summary>
+    event Func<SocketSlashCommand, Task>? OnUntrackCommand;
+
+    /// <summary>
     /// Connects the bot to Discord and registers slash commands.
     /// </summary>
     Task StartAsync(CancellationToken ct);
