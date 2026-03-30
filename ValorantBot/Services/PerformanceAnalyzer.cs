@@ -20,7 +20,8 @@ public class PerformanceAnalyzer : IPerformanceAnalyzer
             : "N/A";
 
         var acs = CalculateAcs(matchData, stats);
-        var rating = Evaluate(stats.Kda, acs, stats.HeadshotPercentage);
+        var weaponContext = WeaponClassifier.ExtractForPlayer(matchData, matchPlayer.Puuid);
+        var rating = Evaluate(stats.Kda, acs, stats.HeadshotPercentage, weaponContext);
 
         return new PerformanceResult
         {
@@ -31,7 +32,8 @@ public class PerformanceAnalyzer : IPerformanceAnalyzer
             Won = won,
             MapName = matchData.Metadata.Map.Name,
             Score = score,
-            Acs = acs
+            Acs = acs,
+            WeaponContext = weaponContext
         };
     }
 
@@ -41,7 +43,7 @@ public class PerformanceAnalyzer : IPerformanceAnalyzer
         return totalRounds == 0 ? 0 : (double)stats.Score / totalRounds;
     }
 
-    private static PerformanceRating Evaluate(double kda, double acs, double hsPercent)
+    private static PerformanceRating Evaluate(double kda, double acs, double hsPercent, WeaponContext? weaponContext)
     {
         var points = 0;
 
@@ -57,8 +59,9 @@ public class PerformanceAnalyzer : IPerformanceAnalyzer
         else if (acs > 270) points += 2;
         else if (acs > 220) points += 1;
 
-        // Headshot % scoring
-        if (hsPercent < 12) points -= 1;
+        // Headshot % scoring — skip penalty if player used mostly non-precision weapons
+        var skipHsPenalty = weaponContext is { LowHsExpected: true };
+        if (!skipHsPenalty && hsPercent < 12) points -= 1;
         else if (hsPercent > 28) points += 1;
 
         return points switch

@@ -25,6 +25,7 @@ public class MessageGenerator(AnthropicClient client, ILogger<MessageGenerator> 
           - For MAJOR tier changes (e.g. Silver to Gold, Plat to Diamond): make it dramatic and over the top
           - For minor rank changes (within same tier): a quick mention is enough
         - If player history is provided, reference trends to make roasts more personal (streaks, declining stats, map weaknesses, etc.)
+        - If weapon context is provided, factor it into your HS% commentary. Don't mock low HS% if the player mainly used shotguns, snipers, or LMGs — that's expected. Mock them for weapon choice instead if anything.
         - Never be mean-spirited about real personal things — keep it about the game
         - Do NOT use any prefix or label. Just output the message directly.
         """;
@@ -45,6 +46,7 @@ public class MessageGenerator(AnthropicClient client, ILogger<MessageGenerator> 
           - For MAJOR tier changes: make it dramatic. Call out the player by name.
           - For minor changes: a quick mention is enough
         - If player history is provided, reference trends to make roasts more personal (streaks, declining stats, etc.)
+        - If weapon context is provided, factor it into your HS% commentary. Don't mock low HS% if the player mainly used shotguns, snipers, or LMGs — that's expected.
         - Never be mean-spirited about real personal things — keep it about the game
         - Do NOT use any prefix or label. Just output the message directly.
         """;
@@ -72,6 +74,7 @@ public class MessageGenerator(AnthropicClient client, ILogger<MessageGenerator> 
         var rankBlock = rankChange is not null
             ? $"\nRANK CHANGE: {(rankChange.IsPromotion ? "PROMOTED" : "DEMOTED")} from {rankChange.OldRank} to {rankChange.NewRank} ({(rankChange.IsMajor ? "MAJOR tier change" : "minor change")})\n"
             : "";
+        var weaponBlock = FormatWeaponContext(result.WeaponContext);
         var prompt = $"""
             Player: {result.MatchPlayer.Name}#{result.MatchPlayer.Tag}
             Agent: {result.MatchPlayer.Agent.Name}
@@ -80,7 +83,7 @@ public class MessageGenerator(AnthropicClient client, ILogger<MessageGenerator> 
             K/D/A: {stats.Kills}/{stats.Deaths}/{stats.Assists}
             Combat Score: {result.Acs:F0}
             KDA Ratio: {stats.Kda:F2}
-            Headshot %: {stats.HeadshotPercentage:F1}%
+            Headshot %: {stats.HeadshotPercentage:F1}%{weaponBlock}
             Performance Rating: {result.Rating}
             {historyBlock}{rankBlock}
             Generate a single Discord message for this player's performance.
@@ -128,8 +131,9 @@ public class MessageGenerator(AnthropicClient client, ILogger<MessageGenerator> 
             var rankLine = rankChanges is not null && rankChanges.TryGetValue(playerKey, out var rc)
                 ? $"\n    RANK CHANGE: {(rc.IsPromotion ? "PROMOTED" : "DEMOTED")} from {rc.OldRank} to {rc.NewRank} ({(rc.IsMajor ? "MAJOR tier change" : "minor change")})"
                 : "";
+            var weaponLine = FormatWeaponContext(r.WeaponContext);
             return $"""
-                - {key} | Agent: {r.MatchPlayer.Agent.Name} | K/D/A: {s.Kills}/{s.Deaths}/{s.Assists} | ACS: {r.Acs:F0} | KDA: {s.Kda:F2} | HS%: {s.HeadshotPercentage:F1}% | Rating: {r.Rating}{historyLine}{rankLine}
+                - {key} | Agent: {r.MatchPlayer.Agent.Name} | K/D/A: {s.Kills}/{s.Deaths}/{s.Assists} | ACS: {r.Acs:F0} | KDA: {s.Kda:F2} | HS%: {s.HeadshotPercentage:F1}%{weaponLine} | Rating: {r.Rating}{historyLine}{rankLine}
                 """;
         }));
 
@@ -218,6 +222,19 @@ public class MessageGenerator(AnthropicClient client, ILogger<MessageGenerator> 
         var names = string.Join(", ", results.Select(r => $"**{r.MatchPlayer.Name}**"));
         var outcome = first.Won ? "won" : "lost";
         return $"👥 {names} stacked on {first.MapName} and {outcome} {first.Score}. Yikes.";
+    }
+
+    private static string FormatWeaponContext(WeaponContext? ctx)
+    {
+        if (ctx is not { HasData: true }) return "";
+
+        var commentary = ctx.LowHsExpected
+            ? "Low HS% is expected — player used mostly shotguns/snipers/LMGs."
+            : "Player used mostly rifles/pistols — HS% is a fair metric.";
+
+        var mostUsed = ctx.MostUsedWeapon is not null ? $" Most used: {ctx.MostUsedWeapon}." : "";
+
+        return $"\n            Weapon Context: {ctx.PrecisionKills}/{ctx.TotalWeaponKills} kills with precision weapons ({ctx.PrecisionKillPercent:F0}%).{mostUsed} {commentary}";
     }
 
     private static string GetFallbackMessage(PerformanceResult result)

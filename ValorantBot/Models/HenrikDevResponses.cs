@@ -70,6 +70,9 @@ public class MatchDetailData
 
     [JsonPropertyName("teams")]
     public List<MatchTeam> Teams { get; set; } = [];
+
+    [JsonPropertyName("rounds")]
+    public List<MatchRound>? Rounds { get; set; }
 }
 
 public class MatchDetailMetadata
@@ -184,6 +187,38 @@ public class TeamRounds
 
     [JsonPropertyName("lost")]
     public int Lost { get; set; }
+}
+
+// --- Round / Kill Detail ---
+
+public class MatchRound
+{
+    [JsonPropertyName("stats")]
+    public List<RoundPlayerStats>? Stats { get; set; }
+}
+
+public class RoundPlayerStats
+{
+    [JsonPropertyName("player_puuid")]
+    public string? PlayerPuuid { get; set; }
+
+    [JsonPropertyName("kills")]
+    public List<RoundKill>? Kills { get; set; }
+}
+
+public class RoundKill
+{
+    [JsonPropertyName("finishing_damage")]
+    public FinishingDamage? FinishingDamage { get; set; }
+}
+
+public class FinishingDamage
+{
+    [JsonPropertyName("damage_type")]
+    public string? DamageType { get; set; }
+
+    [JsonPropertyName("damage_item")]
+    public string? DamageItem { get; set; }
 }
 
 // --- MMR / Rank (v3) ---

@@ -226,7 +226,9 @@ public class DiscordNotifier : IDiscordNotifier
             .AddField("K/D/A", $"{stats.Kills}/{stats.Deaths}/{stats.Assists}", inline: true)
             .AddField("ACS", $"{result.Acs:F0}", inline: true)
             .AddField("KDA", $"{stats.Kda:F2}", inline: true)
-            .AddField("HS%", $"{stats.HeadshotPercentage:F1}%", inline: true);
+            .AddField("HS%", result.WeaponContext is { HasData: true, LowHsExpected: true }
+                ? $"{stats.HeadshotPercentage:F1}% (mostly {result.WeaponContext.MostUsedWeapon})"
+                : $"{stats.HeadshotPercentage:F1}%", inline: true);
 
         if (rankChange is not null)
         {

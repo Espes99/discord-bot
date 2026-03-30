@@ -20,4 +20,6 @@ public class PerformanceResult
     public required string Score { get; init; }
 
     public required double Acs { get; init; }
+
+    public WeaponContext? WeaponContext { get; init; }
 }
