@@ -394,7 +394,15 @@ public class Worker(
                 var entry = sorted[i];
                 var medal = i switch { 0 => "🥇", 1 => "🥈", 2 => "🥉", _ => $"**{i + 1}.**" };
                 var rrText = entry.RankOrder > 0 ? $" - {entry.Rr} RR" : "";
-                lines.Add($"{medal} **{entry.Player.Name}#{entry.Player.Tag}** — {entry.Rank}{rrText}");
+                var indicator = "";
+                if (entry.RankOrder > 0)
+                {
+                    if (entry.Rr >= 90)
+                        indicator = " 🟢";
+                    else if (entry.Rr <= 10)
+                        indicator = " 🚨";
+                }
+                lines.Add($"{medal} **{entry.Player.Name}#{entry.Player.Tag}** — {entry.Rank}{rrText}{indicator}");
             }
 
             embed.WithDescription(string.Join("\n", lines));
