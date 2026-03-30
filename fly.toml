@@ -11,6 +11,10 @@ primary_region = 'lhr'
 [processes]
   worker = 'dotnet ValorantBot.dll'
 
+[mounts]
+  source = 'bot_data'
+  destination = '/data'
+
 [[vm]]
   cpu_kind = 'shared'
   cpus = 1

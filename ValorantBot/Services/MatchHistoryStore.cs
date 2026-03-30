@@ -22,7 +22,8 @@ public class MatchHistoryStore : IMatchHistoryStore
     public MatchHistoryStore(ILogger<MatchHistoryStore> logger)
     {
         _logger = logger;
-        var dataDir = Path.Combine(AppContext.BaseDirectory, "data");
+        var dataDir = Environment.GetEnvironmentVariable("DATA_DIR")
+            ?? Path.Combine(AppContext.BaseDirectory, "data");
         Directory.CreateDirectory(dataDir);
         _filePath = Path.Combine(dataDir, "match_history.json");
         Load();

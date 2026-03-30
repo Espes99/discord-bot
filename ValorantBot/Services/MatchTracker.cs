@@ -14,7 +14,8 @@ public class MatchTracker : IMatchTracker
     public MatchTracker(ILogger<MatchTracker> logger)
     {
         _logger = logger;
-        var dataDir = Path.Combine(AppContext.BaseDirectory, "data");
+        var dataDir = Environment.GetEnvironmentVariable("DATA_DIR")
+            ?? Path.Combine(AppContext.BaseDirectory, "data");
         Directory.CreateDirectory(dataDir);
         _filePath = Path.Combine(dataDir, "last_matches.json");
         logger.LogInformation("Match tracker using path: {Path} (BaseDirectory: {BaseDir})", _filePath, AppContext.BaseDirectory);
