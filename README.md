@@ -22,6 +22,7 @@ Players can also trigger a check on-demand using the `/latest <name> <tag>` slas
 - **Performance ratings** - point-based system across KDA, ACS, and HS% producing five tiers: Terrible, Bad, Average, Good, Excellent
 - **AI-powered roasts** - Claude Sonnet generates personalized messages using player stats, history trends, and agent/map context; falls back to static templates if the API is unavailable
 - **Rank change detection** - detects promotions and demotions between matches, generates dedicated AI messages for tier changes (e.g. Silver to Gold)
+- **Restart cooldown** - persists last poll timestamp to disk, so the bot waits out the remaining interval on restart instead of polling immediately
 - **Retry logic** - HenrikDev API calls retry up to 3 times with 2-second backoff on failure
 - **Rate limiting** - 10-second delay between player API requests, 2-second delay between individual API calls
 
@@ -63,10 +64,11 @@ cp ValorantBot/appsettings.example.json ValorantBot/appsettings.json
 
 The bot stores state in the `data/` directory (created automatically):
 
-| File                 | Purpose                                                                  |
-| -------------------- | ------------------------------------------------------------------------ |
-| `last_matches.json`  | Last seen match ID per player, used to prevent duplicate messages        |
-| `match_history.json` | Last 20 match records per player, used for trend analysis and AI context |
+| File                 | Purpose                                                                             |
+| -------------------- | ----------------------------------------------------------------------------------- |
+| `last_matches.json`  | Last seen match ID per player, used to prevent duplicate messages                   |
+| `match_history.json` | Last 20 match records per player, used for trend analysis and AI context            |
+| `poll_state.json`    | Timestamp of last poll, used to skip polling on restart if interval has not elapsed |
 
 ## Running Locally
 
