@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using ValorantBot.Models;
 
 namespace ValorantBot.Services;
@@ -5,7 +6,7 @@ namespace ValorantBot.Services;
 /// <summary>
 /// Analyzes a player's match performance based on KDA, ACS, and headshot percentage.
 /// </summary>
-public class PerformanceAnalyzer : IPerformanceAnalyzer
+public class PerformanceAnalyzer(ILogger<PerformanceAnalyzer> logger) : IPerformanceAnalyzer
 {
     /// <inheritdoc />
     public PerformanceResult Analyze(
@@ -21,7 +22,23 @@ public class PerformanceAnalyzer : IPerformanceAnalyzer
 
         var acs = CalculateAcs(matchData, stats);
         var weaponContext = WeaponClassifier.ExtractForPlayer(matchData, matchPlayer.Puuid);
-        var rating = Evaluate(stats.Kda, acs, stats.HeadshotPercentage, weaponContext);
+
+        if (weaponContext.HasData)
+            logger.LogDebug(
+                "[WeaponContext] {Player}: {Total} tracked kills — {Precision} precision, {NonPrecision} non-precision ({PrecisionPct:F0}%). Most used: {MostUsed}. LowHsExpected={LowHsExpected}",
+                $"{matchPlayer.Name}#{matchPlayer.Tag}",
+                weaponContext.TotalWeaponKills,
+                weaponContext.PrecisionKills,
+                weaponContext.NonPrecisionKills,
+                weaponContext.PrecisionKillPercent,
+                weaponContext.MostUsedWeapon ?? "unknown",
+                weaponContext.LowHsExpected);
+        else
+            logger.LogDebug(
+                "[WeaponContext] {Player}: no kill data available, weapon context inactive",
+                $"{matchPlayer.Name}#{matchPlayer.Tag}");
+
+        var rating = Evaluate(stats.Kda, acs, stats.HeadshotPercentage, weaponContext, matchPlayer, logger);
 
         return new PerformanceResult
         {
@@ -43,7 +60,7 @@ public class PerformanceAnalyzer : IPerformanceAnalyzer
         return totalRounds == 0 ? 0 : (double)stats.Score / totalRounds;
     }
 
-    private static PerformanceRating Evaluate(double kda, double acs, double hsPercent, WeaponContext? weaponContext)
+    private static PerformanceRating Evaluate(double kda, double acs, double hsPercent, WeaponContext? weaponContext, MatchPlayer matchPlayer, ILogger logger)
     {
         var points = 0;
 
@@ -61,8 +78,23 @@ public class PerformanceAnalyzer : IPerformanceAnalyzer
 
         // Headshot % scoring — skip penalty if player used mostly non-precision weapons
         var skipHsPenalty = weaponContext is { LowHsExpected: true };
-        if (!skipHsPenalty && hsPercent < 12) points -= 1;
-        else if (hsPercent > 28) points += 1;
+        if (!skipHsPenalty && hsPercent < 12)
+        {
+            points -= 1;
+            logger.LogDebug(
+                "[WeaponContext] {Player}: HS% penalty applied ({HsPct:F1}% < 12%)",
+                $"{matchPlayer.Name}#{matchPlayer.Tag}", hsPercent);
+        }
+        else if (skipHsPenalty && hsPercent < 12)
+        {
+            logger.LogDebug(
+                "[WeaponContext] {Player}: HS% penalty SKIPPED ({HsPct:F1}% < 12%) — LowHsExpected due to {MostUsed}",
+                $"{matchPlayer.Name}#{matchPlayer.Tag}", hsPercent, weaponContext!.MostUsedWeapon ?? "non-precision weapon");
+        }
+        else if (hsPercent > 28)
+        {
+            points += 1;
+        }
 
         return points switch
         {
