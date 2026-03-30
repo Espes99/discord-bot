@@ -13,7 +13,7 @@ No tests exist yet.
 
 ## Project Overview
 
-A .NET 9 Worker Service Discord bot that checks Valorant match stats for tracked players via the HenrikDev API, then uses Claude Haiku to generate banter/roast messages and posts them to a Discord channel.
+A .NET 9 Worker Service Discord bot that checks Valorant match stats for tracked players via the HenrikDev API, then uses Claude Sonnet to generate banter/roast messages and posts them to a Discord channel.
 
 Triggered on-demand via the `/latest` Discord slash command — no polling or scheduling.
 
@@ -26,13 +26,13 @@ Triggered on-demand via the `/latest` Discord slash command — no polling or sc
 1. `Worker.HandleLatestCommandAsync` iterates all tracked players from config
 2. `HenrikDevClient` fetches recent matches (v4 matchlist endpoint), then full match details (v4 match endpoint) from HenrikDev API
 3. `PerformanceAnalyzer.Analyze` scores the player on KDA, ACS, and HS% → produces a `PerformanceRating` (Terrible through Excellent)
-4. `MessageGenerator` sends stats to Claude Haiku with a system prompt requesting toxic/funny messages; falls back to static `MessageTemplates` on API failure
+4. `MessageGenerator` sends stats to Claude Sonnet with a system prompt requesting toxic/funny messages; falls back to static `MessageTemplates` on API failure
 5. `DiscordNotifier` posts the AI message + a stats embed to the configured channel
 
 **External APIs:**
 
 - HenrikDev Valorant API v4 (`https://api.henrikdev.xyz/valorant/`) — match list and match detail endpoints, authenticated via `Authorization` header
-- Anthropic Claude API — message generation via `Anthropic.SDK`, model `claude-haiku-4-5-20251001`
+- Anthropic Claude API — message generation via `Anthropic.SDK`, model `claude-sonnet-4-6`
 - Discord Gateway — via `Discord.Net` socket client
 
 ## Configuration
