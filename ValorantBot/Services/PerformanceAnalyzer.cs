@@ -81,13 +81,13 @@ public class PerformanceAnalyzer(ILogger<PerformanceAnalyzer> logger) : IPerform
         if (!skipHsPenalty && hsPercent < 12)
         {
             points -= 1;
-            logger.LogDebug(
+            logger.LogInformation(
                 "[WeaponContext] {Player}: HS% penalty applied ({HsPct:F1}% < 12%)",
                 $"{matchPlayer.Name}#{matchPlayer.Tag}", hsPercent);
         }
         else if (skipHsPenalty && hsPercent < 12)
         {
-            logger.LogDebug(
+            logger.LogInformation(
                 "[WeaponContext] {Player}: HS% penalty SKIPPED ({HsPct:F1}% < 12%) — LowHsExpected due to {MostUsed}",
                 $"{matchPlayer.Name}#{matchPlayer.Tag}", hsPercent, weaponContext!.MostUsedWeapon ?? "non-precision weapon");
         }
