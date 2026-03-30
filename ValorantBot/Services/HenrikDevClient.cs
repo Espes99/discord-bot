@@ -66,6 +66,30 @@ public class HenrikDevClient(HttpClient httpClient, ILogger<HenrikDevClient> log
         return result?.Data;
     }
 
+    /// <inheritdoc />
+    public async Task<MmrData?> GetPlayerMmrAsync(
+        string name, string tag, string region, CancellationToken ct = default)
+    {
+        var url = $"v3/mmr/{region}/pc/{Uri.EscapeDataString(name)}/{Uri.EscapeDataString(tag)}";
+        logger.LogDebug("Fetching MMR: {Url}", url);
+
+        var response = await SendWithRetryAsync(url, ct);
+        if (response is null)
+            return null;
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            logger.LogWarning("MMR not found for {Name}#{Tag}", name, tag);
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+
+        var body = await response.Content.ReadAsStringAsync(ct);
+        var result = JsonSerializer.Deserialize<MmrResponse>(body);
+        return result?.Data;
+    }
+
     private async Task<HttpResponseMessage?> SendWithRetryAsync(string url, CancellationToken ct)
     {
         for (var attempt = 1; attempt <= MaxRetries; attempt++)

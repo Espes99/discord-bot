@@ -185,3 +185,32 @@ public class TeamRounds
     [JsonPropertyName("lost")]
     public int Lost { get; set; }
 }
+
+// --- MMR / Rank (v3) ---
+
+public class MmrResponse
+{
+    [JsonPropertyName("status")]
+    public int Status { get; set; }
+
+    [JsonPropertyName("data")]
+    public MmrData Data { get; set; } = new();
+}
+
+public class MmrData
+{
+    [JsonPropertyName("current")]
+    public MmrCurrent Current { get; set; } = new();
+}
+
+public class MmrCurrent
+{
+    [JsonPropertyName("tier")]
+    public TierInfo Tier { get; set; } = new();
+
+    [JsonPropertyName("rr")]
+    public int Rr { get; set; }
+
+    [JsonPropertyName("last_change")]
+    public int LastChange { get; set; }
+}

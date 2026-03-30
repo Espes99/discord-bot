@@ -23,6 +23,9 @@ public class DiscordNotifier : IDiscordNotifier
     /// <inheritdoc />
     public event Func<SocketSlashCommand, Task>? OnStatusCommand;
 
+    /// <inheritdoc />
+    public event Func<SocketSlashCommand, Task>? OnRanksCommand;
+
     private readonly IMatchHistoryStore _historyStore;
 
     public DiscordNotifier(
@@ -65,6 +68,10 @@ public class DiscordNotifier : IDiscordNotifier
             .WithName("status")
             .WithDescription("Show bot status, tracked players, and recent activity");
 
+        var ranksCommand = new SlashCommandBuilder()
+            .WithName("ranks")
+            .WithDescription("Show tracked players ranked by current rank and RR");
+
         var guild = _client.GetGuild(_settings.GuildId);
         if (guild is null)
         {
@@ -75,7 +82,8 @@ public class DiscordNotifier : IDiscordNotifier
 
         await guild.BulkOverwriteApplicationCommandAsync([
             latestCommand.Build(),
-            statusCommand.Build()
+            statusCommand.Build(),
+            ranksCommand.Build()
         ]);
 
         _isReady = true;
@@ -97,6 +105,13 @@ public class DiscordNotifier : IDiscordNotifier
             case "status":
                 if (OnStatusCommand is not null)
                     await OnStatusCommand.Invoke(command);
+                else
+                    await command.RespondAsync("Bot is not fully initialized yet.");
+                break;
+
+            case "ranks":
+                if (OnRanksCommand is not null)
+                    await OnRanksCommand.Invoke(command);
                 else
                     await command.RespondAsync("Bot is not fully initialized yet.");
                 break;

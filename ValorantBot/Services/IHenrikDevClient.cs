@@ -25,4 +25,9 @@ public interface IHenrikDevClient
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Match detail data, or null if the match was not found.</returns>
     Task<MatchDetailData?> GetMatchDetailsAsync(string matchId, string region, CancellationToken ct = default);
+
+    /// <summary>
+    /// Fetches the current MMR/rank for a player.
+    /// </summary>
+    Task<MmrData?> GetPlayerMmrAsync(string name, string tag, string region, CancellationToken ct = default);
 }

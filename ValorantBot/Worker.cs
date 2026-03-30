@@ -29,6 +29,7 @@ public class Worker(
 
         discord.OnLatestCommand += HandleLatestCommandAsync;
         discord.OnStatusCommand += HandleStatusCommandAsync;
+        discord.OnRanksCommand += HandleRanksCommandAsync;
         await discord.StartAsync(stoppingToken);
         await discord.WaitUntilReadyAsync(stoppingToken);
 
@@ -336,6 +337,94 @@ public class Worker(
             logger.LogError(ex, "Failed to handle /status command");
             await command.FollowupAsync("Failed to retrieve bot status.");
         }
+    }
+
+    private async Task HandleRanksCommandAsync(SocketSlashCommand command)
+    {
+        await command.DeferAsync();
+
+        try
+        {
+            var players = trackedPlayersOptions.Value;
+            if (players.Count == 0)
+            {
+                await command.FollowupAsync("No tracked players configured.");
+                return;
+            }
+
+            using var scope = scopeFactory.CreateScope();
+            var henrikClient = scope.ServiceProvider.GetRequiredService<IHenrikDevClient>();
+
+            var rankEntries = new List<(TrackedPlayer Player, string Rank, int Rr, int RankOrder)>();
+
+            foreach (var player in players)
+            {
+                try
+                {
+                    var mmr = await henrikClient.GetPlayerMmrAsync(player.Name, player.Tag, player.Region);
+                    if (mmr is not null && !string.IsNullOrEmpty(mmr.Current.Tier.Name))
+                    {
+                        var order = GetRankOrder(mmr.Current.Tier.Name);
+                        rankEntries.Add((player, mmr.Current.Tier.Name, mmr.Current.Rr, order));
+                    }
+                    else
+                    {
+                        rankEntries.Add((player, "Unranked", 0, 0));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to fetch MMR for {Name}#{Tag}", player.Name, player.Tag);
+                    rankEntries.Add((player, "Unknown", 0, -1));
+                }
+
+                await Task.Delay(TimeSpan.FromSeconds(2));
+            }
+
+            var sorted = rankEntries.OrderByDescending(e => e.RankOrder).ThenByDescending(e => e.Rr).ToList();
+
+            var embed = new EmbedBuilder()
+                .WithTitle("Ranked Leaderboard")
+                .WithColor(Color.Gold)
+                .WithTimestamp(DateTimeOffset.UtcNow);
+
+            var lines = new List<string>();
+            for (var i = 0; i < sorted.Count; i++)
+            {
+                var entry = sorted[i];
+                var medal = i switch { 0 => "🥇", 1 => "🥈", 2 => "🥉", _ => $"**{i + 1}.**" };
+                var rrText = entry.RankOrder > 0 ? $" - {entry.Rr} RR" : "";
+                lines.Add($"{medal} **{entry.Player.Name}#{entry.Player.Tag}** — {entry.Rank}{rrText}");
+            }
+
+            embed.WithDescription(string.Join("\n", lines));
+            embed.WithFooter("Valorant Bot");
+
+            await command.FollowupAsync(embed: embed.Build());
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to handle /ranks command");
+            await command.FollowupAsync("Failed to retrieve rank data.");
+        }
+    }
+
+    private static int GetRankOrder(string rank)
+    {
+        var rankOrder = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Iron 1"] = 1, ["Iron 2"] = 2, ["Iron 3"] = 3,
+            ["Bronze 1"] = 4, ["Bronze 2"] = 5, ["Bronze 3"] = 6,
+            ["Silver 1"] = 7, ["Silver 2"] = 8, ["Silver 3"] = 9,
+            ["Gold 1"] = 10, ["Gold 2"] = 11, ["Gold 3"] = 12,
+            ["Platinum 1"] = 13, ["Platinum 2"] = 14, ["Platinum 3"] = 15,
+            ["Diamond 1"] = 16, ["Diamond 2"] = 17, ["Diamond 3"] = 18,
+            ["Ascendant 1"] = 19, ["Ascendant 2"] = 20, ["Ascendant 3"] = 21,
+            ["Immortal 1"] = 22, ["Immortal 2"] = 23, ["Immortal 3"] = 24,
+            ["Radiant"] = 25
+        };
+
+        return rankOrder.GetValueOrDefault(rank, 0);
     }
 
     private static string FormatRelativeTime(TimeSpan duration)
