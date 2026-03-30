@@ -16,6 +16,7 @@ public class MatchHistoryStore : IMatchHistoryStore
 
     private readonly string _filePath;
     private readonly ILogger<MatchHistoryStore> _logger;
+    private readonly object _lock = new();
     private Dictionary<string, List<MatchHistoryEntry>> _history = new();
 
     public MatchHistoryStore(ILogger<MatchHistoryStore> logger)
@@ -29,37 +30,43 @@ public class MatchHistoryStore : IMatchHistoryStore
 
     public List<MatchHistoryEntry> GetHistory(string playerKey)
     {
-        return _history.TryGetValue(playerKey, out var entries)
-            ? entries.ToList()
-            : [];
+        lock (_lock)
+        {
+            return _history.TryGetValue(playerKey, out var entries)
+                ? entries.ToList()
+                : [];
+        }
     }
 
     public void AddMatch(string playerKey, MatchHistoryEntry entry)
     {
-        if (!_history.TryGetValue(playerKey, out var entries))
+        lock (_lock)
         {
-            entries = [];
-            _history[playerKey] = entries;
+            if (!_history.TryGetValue(playerKey, out var entries))
+            {
+                entries = [];
+                _history[playerKey] = entries;
+            }
+
+            // Avoid duplicates
+            if (entries.Any(e => e.MatchId == entry.MatchId))
+                return;
+
+            entries.Add(entry);
+
+            // Trim to most recent N entries
+            if (entries.Count > MaxEntriesPerPlayer)
+            {
+                _history[playerKey] = entries
+                    .OrderByDescending(e => e.PlayedAt)
+                    .Take(MaxEntriesPerPlayer)
+                    .ToList();
+            }
+
+            Save();
+            _logger.LogDebug("Saved match history for {Player}, now {Count} entries",
+                playerKey, _history[playerKey].Count);
         }
-
-        // Avoid duplicates
-        if (entries.Any(e => e.MatchId == entry.MatchId))
-            return;
-
-        entries.Add(entry);
-
-        // Trim to most recent N entries
-        if (entries.Count > MaxEntriesPerPlayer)
-        {
-            _history[playerKey] = entries
-                .OrderByDescending(e => e.PlayedAt)
-                .Take(MaxEntriesPerPlayer)
-                .ToList();
-        }
-
-        Save();
-        _logger.LogDebug("Saved match history for {Player}, now {Count} entries",
-            playerKey, _history[playerKey].Count);
     }
 
     private void Load()

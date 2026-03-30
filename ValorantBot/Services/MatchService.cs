@@ -13,7 +13,7 @@ public class MatchService(
     /// <inheritdoc />
     public async Task<PerformanceResult?> GetLatestPerformanceAsync(TrackedPlayer player, CancellationToken ct = default)
     {
-        var playerKey = $"{player.Name}#{player.Tag}";
+        var playerKey = MatchTracker.PlayerKey(player.Name, player.Tag);
 
         var matches = await henrikDev.GetRecentMatchesAsync(player.Name, player.Tag, player.Region, ct);
         if (matches.Count == 0)

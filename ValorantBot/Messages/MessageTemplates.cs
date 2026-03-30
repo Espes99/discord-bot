@@ -4,8 +4,6 @@ namespace ValorantBot.Messages;
 
 public static class MessageTemplates
 {
-    private static readonly Random Rng = new();
-
     private static readonly string[] TerribleMessages =
     [
         "💀 **{name}** went {kills}/{deaths}/{assists} on {map}. Genuinely concerning.",
@@ -60,7 +58,7 @@ public static class MessageTemplates
             _ => AverageMessages
         };
 
-        var template = templates[Rng.Next(templates.Length)];
+        var template = templates[Random.Shared.Next(templates.Length)];
         return FormatMessage(template, result);
     }
 

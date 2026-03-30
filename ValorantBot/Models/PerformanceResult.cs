@@ -19,12 +19,5 @@ public class PerformanceResult
     public required string MapName { get; init; }
     public required string Score { get; init; }
 
-    public double Acs
-    {
-        get
-        {
-            var totalRounds = MatchData.Teams.Sum(t => t.Rounds.Won + t.Rounds.Lost) / 2;
-            return totalRounds == 0 ? 0 : (double)MatchPlayer.Stats.Score / totalRounds;
-        }
-    }
+    public required double Acs { get; init; }
 }

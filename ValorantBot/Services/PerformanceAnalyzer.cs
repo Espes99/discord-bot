@@ -19,9 +19,7 @@ public class PerformanceAnalyzer : IPerformanceAnalyzer
             ? $"{team.Rounds.Won} - {team.Rounds.Lost}"
             : "N/A";
 
-        var totalRounds = matchData.Teams.Sum(t => t.Rounds.Won + t.Rounds.Lost) / 2;
-        var acs = totalRounds == 0 ? 0 : (double)stats.Score / totalRounds;
-
+        var acs = CalculateAcs(matchData, stats);
         var rating = Evaluate(stats.Kda, acs, stats.HeadshotPercentage);
 
         return new PerformanceResult
@@ -32,8 +30,15 @@ public class PerformanceAnalyzer : IPerformanceAnalyzer
             Rating = rating,
             Won = won,
             MapName = matchData.Metadata.Map.Name,
-            Score = score
+            Score = score,
+            Acs = acs
         };
+    }
+
+    private static double CalculateAcs(MatchDetailData matchData, PlayerStats stats)
+    {
+        var totalRounds = matchData.Teams.Sum(t => t.Rounds.Won + t.Rounds.Lost) / 2;
+        return totalRounds == 0 ? 0 : (double)stats.Score / totalRounds;
     }
 
     private static PerformanceRating Evaluate(double kda, double acs, double hsPercent)

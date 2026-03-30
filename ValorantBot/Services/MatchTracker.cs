@@ -4,8 +4,11 @@ namespace ValorantBot.Services;
 
 public class MatchTracker : IMatchTracker
 {
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+
     private readonly string _filePath;
     private readonly ILogger<MatchTracker> _logger;
+    private readonly object _lock = new();
     private Dictionary<string, string> _lastMatchIds = new();
 
     public MatchTracker(ILogger<MatchTracker> logger)
@@ -20,16 +23,19 @@ public class MatchTracker : IMatchTracker
 
     public bool IsNewMatch(string playerKey, string matchId)
     {
-        if (_lastMatchIds.TryGetValue(playerKey, out var lastId) && lastId == matchId)
-            return false;
-
-        return true;
+        lock (_lock)
+        {
+            return !_lastMatchIds.TryGetValue(playerKey, out var lastId) || lastId != matchId;
+        }
     }
 
     public void SetLastMatch(string playerKey, string matchId)
     {
-        _lastMatchIds[playerKey] = matchId;
-        Save();
+        lock (_lock)
+        {
+            _lastMatchIds[playerKey] = matchId;
+            Save();
+        }
     }
 
     public static string PlayerKey(string name, string tag) => $"{name}#{tag}";
@@ -61,7 +67,7 @@ public class MatchTracker : IMatchTracker
     {
         try
         {
-            var json = JsonSerializer.Serialize(_lastMatchIds, new JsonSerializerOptions { WriteIndented = true });
+            var json = JsonSerializer.Serialize(_lastMatchIds, JsonOptions);
             File.WriteAllText(_filePath, json);
         }
         catch (Exception ex)
