@@ -4,12 +4,25 @@ A .NET 9 Discord bot that tracks Valorant match stats for configured players and
 
 ## How It Works
 
-1. The bot polls tracked players for new matches every 20 minutes
-2. When a new match is found, it analyzes performance (KDA, ACS, HS%) and assigns a rating
-3. Claude Haiku generates a funny/toxic message based on the performance
-4. The message and a stats embed are posted to a configured Discord channel
+1. The bot polls tracked players for new competitive matches every 20 minutes (configurable)
+2. When a new match is found, it analyzes performance (KDA, ACS, HS%) and assigns a rating from Terrible to Excellent
+3. Match results are persisted locally (last 20 per player) to build player history and prevent duplicate messages
+4. If 2+ tracked players were on the same team, a squad message is generated that compares and roasts the group
+5. Claude Sonnet generates a funny/toxic message based on performance, trends, and player history
+6. The message and a color-coded stats embed are posted to a configured Discord channel
 
-Players can also trigger a check on-demand using the `/latest` slash command.
+Players can also trigger a check on-demand using the `/latest <name> <tag>` slash command.
+
+## Features
+
+- **Competitive-only filtering** - only tracks competitive matches, skipping unranked/custom games
+- **Squad detection** - detects when 2+ tracked players queue together and generates a group roast comparing their performances
+- **Player history tracking** - persists the last 20 matches per player to `data/match_history.json`, enabling trend analysis (improving/stable/declining), win streaks, and per-map stats
+- **Duplicate prevention** - tracks the last seen match ID per player in `data/last_matches.json` to avoid re-posting
+- **Performance ratings** - point-based system across KDA, ACS, and HS% producing five tiers: Terrible, Bad, Average, Good, Excellent
+- **AI-powered roasts** - Claude Sonnet generates personalized messages using player stats, history trends, and agent/map context; falls back to static templates if the API is unavailable
+- **Retry logic** - HenrikDev API calls retry up to 3 times with 2-second backoff on failure
+- **Rate limiting** - 10-second delay between player API requests, 2-second delay between individual API calls
 
 ## Prerequisites
 
@@ -36,6 +49,15 @@ cp ValorantBot/appsettings.example.json ValorantBot/appsettings.json
 | `Anthropic.ApiKey`            | Anthropic API key                                     |
 | `TrackedPlayers`              | Array of `{ Name, Tag, Region }` for players to track |
 | `Polling.IntervalSeconds`     | Polling interval in seconds (default: 1200)           |
+
+## Data Persistence
+
+The bot stores state in the `data/` directory (created automatically):
+
+| File                 | Purpose                                                                  |
+| -------------------- | ------------------------------------------------------------------------ |
+| `last_matches.json`  | Last seen match ID per player, used to prevent duplicate messages        |
+| `match_history.json` | Last 20 match records per player, used for trend analysis and AI context |
 
 ## Running Locally
 
