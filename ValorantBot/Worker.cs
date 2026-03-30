@@ -383,17 +383,12 @@ public class Worker(
 
             var sorted = rankEntries.OrderByDescending(e => e.RankOrder).ThenByDescending(e => e.Rr).ToList();
 
-            var embed = new EmbedBuilder()
-                .WithTitle("Ranked Leaderboard")
-                .WithColor(Color.Gold)
-                .WithTimestamp(DateTimeOffset.UtcNow);
-
-            var lines = new List<string>();
-            for (var i = 0; i < sorted.Count; i++)
+            var embeds = new List<Embed>();
+            for (var i = 0; i < sorted.Count && i < 10; i++)
             {
                 var entry = sorted[i];
-                var medal = i switch { 0 => "🥇", 1 => "🥈", 2 => "🥉", _ => $"**{i + 1}.**" };
-                var rrText = entry.RankOrder > 0 ? $" - {entry.Rr} RR" : "";
+                var medal = i switch { 0 => "🥇", 1 => "🥈", 2 => "🥉", _ => $"#{i + 1}" };
+                var rrText = entry.RankOrder > 0 ? $"{entry.Rr} RR" : "";
                 var indicator = "";
                 if (entry.RankOrder > 0)
                 {
@@ -402,13 +397,28 @@ public class Worker(
                     else if (entry.Rr <= 10)
                         indicator = " 🚨";
                 }
-                lines.Add($"{medal} **{entry.Player.Name}#{entry.Player.Tag}** — {entry.Rank}{rrText}{indicator}");
+
+                var color = i switch { 0 => Color.Gold, 1 => new Color(192, 192, 192), 2 => new Color(205, 127, 50), _ => Color.LightGrey };
+                var description = entry.RankOrder > 0
+                    ? $"{entry.Rank} - {rrText}{indicator}"
+                    : entry.Rank;
+
+                var embedBuilder = new EmbedBuilder()
+                    .WithAuthor($"{medal} {entry.Player.Name}#{entry.Player.Tag}")
+                    .WithDescription(description)
+                    .WithColor(color);
+
+                var iconUrl = GetRankIconUrl(entry.Rank);
+                if (iconUrl is not null)
+                    embedBuilder.WithThumbnailUrl(iconUrl);
+
+                if (i == sorted.Count - 1 || i == 9)
+                    embedBuilder.WithFooter("Valorant Bot").WithTimestamp(DateTimeOffset.UtcNow);
+
+                embeds.Add(embedBuilder.Build());
             }
 
-            embed.WithDescription(string.Join("\n", lines));
-            embed.WithFooter("Valorant Bot");
-
-            await command.FollowupAsync(embed: embed.Build());
+            await command.FollowupAsync(embeds: embeds.ToArray());
         }
         catch (Exception ex)
         {
@@ -433,6 +443,29 @@ public class Worker(
         };
 
         return rankOrder.GetValueOrDefault(rank, 0);
+    }
+
+    private static string? GetRankIconUrl(string rank)
+    {
+        const string baseUrl = "https://media.valorant-api.com/competitivetiers/03621f52-342b-cf4e-4f86-9350a49c6d04";
+
+        var tierMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Iron 1"] = 3, ["Iron 2"] = 4, ["Iron 3"] = 5,
+            ["Bronze 1"] = 6, ["Bronze 2"] = 7, ["Bronze 3"] = 8,
+            ["Silver 1"] = 9, ["Silver 2"] = 10, ["Silver 3"] = 11,
+            ["Gold 1"] = 12, ["Gold 2"] = 13, ["Gold 3"] = 14,
+            ["Platinum 1"] = 15, ["Platinum 2"] = 16, ["Platinum 3"] = 17,
+            ["Diamond 1"] = 18, ["Diamond 2"] = 19, ["Diamond 3"] = 20,
+            ["Ascendant 1"] = 21, ["Ascendant 2"] = 22, ["Ascendant 3"] = 23,
+            ["Immortal 1"] = 24, ["Immortal 2"] = 25, ["Immortal 3"] = 26,
+            ["Radiant"] = 27
+        };
+
+        if (!tierMap.TryGetValue(rank, out var tierId))
+            return null;
+
+        return $"{baseUrl}/{tierId}/smallicon.png";
     }
 
     private static string FormatRelativeTime(TimeSpan duration)
