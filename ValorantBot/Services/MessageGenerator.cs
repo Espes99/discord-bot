@@ -5,10 +5,30 @@ using ValorantBot.Models;
 namespace ValorantBot.Services;
 
 /// <summary>
-/// Generates AI-powered Discord messages using Claude Haiku, with static fallbacks.
+/// Generates AI-powered Discord messages using Claude, with static fallbacks.
 /// </summary>
-public class MessageGenerator(AnthropicClient client, ILogger<MessageGenerator> logger) : IMessageGenerator
+public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messageHistory, ILogger<MessageGenerator> logger) : IMessageGenerator
 {
+    private static readonly Random Rng = new();
+
+    private static readonly string[] StyleModifiers =
+    [
+        "Voice: disappointed coach giving a post-game press conference",
+        "Voice: nature documentary narrator observing the player in their natural habitat",
+        "Voice: passive-aggressive mom who's 'not mad, just disappointed'",
+        "Voice: sports commentator doing play-by-play highlights",
+        "Voice: a brutally honest Reddit match review",
+        "Voice: drill sergeant addressing a recruit after a failed exercise",
+        "Voice: weatherman reporting on a natural disaster",
+        "Voice: detective filing a crime report about the match",
+        "Voice: a wine critic, but reviewing gameplay instead of wine",
+        "Voice: an overly enthusiastic hype man (even when they played badly)",
+        "Voice: a therapist trying to process what they just witnessed",
+        "Voice: a judge delivering a verdict in a courtroom",
+        "Voice: an ancient Greek philosopher reflecting on the match",
+        "Voice: a sarcastic best friend who's been watching the whole time",
+    ];
+
     private const string SystemPrompt = """
         You are a toxic but funny Discord bot that roasts Valorant players based on their match stats. Important to be creative with insults and use swear words and foul language to really drive the point home.
 
@@ -91,11 +111,12 @@ public class MessageGenerator(AnthropicClient client, ILogger<MessageGenerator> 
 
         try
         {
+            var systemPrompt = BuildSystemPrompt(SystemPrompt);
             var parameters = new MessageParameters
             {
                 Model = "claude-sonnet-4-6",
                 MaxTokens = 300,
-                System = [new SystemMessage(SystemPrompt)],
+                System = [new SystemMessage(systemPrompt)],
                 Messages = [new Message(RoleType.User, prompt)]
             };
 
@@ -105,6 +126,7 @@ public class MessageGenerator(AnthropicClient client, ILogger<MessageGenerator> 
             if (!string.IsNullOrEmpty(text))
             {
                 logger.LogDebug("Generated message for {Player}: {Message}", result.MatchPlayer.Name, text);
+                messageHistory.AddMessage(text);
                 return text;
             }
         }
@@ -148,11 +170,12 @@ public class MessageGenerator(AnthropicClient client, ILogger<MessageGenerator> 
 
         try
         {
+            var systemPrompt = BuildSystemPrompt(SquadSystemPrompt);
             var parameters = new MessageParameters
             {
                 Model = "claude-sonnet-4-6",
                 MaxTokens = 500,
-                System = [new SystemMessage(SquadSystemPrompt)],
+                System = [new SystemMessage(systemPrompt)],
                 Messages = [new Message(RoleType.User, prompt)]
             };
 
@@ -162,6 +185,7 @@ public class MessageGenerator(AnthropicClient client, ILogger<MessageGenerator> 
             if (!string.IsNullOrEmpty(text))
             {
                 logger.LogDebug("Generated squad message: {Message}", text);
+                messageHistory.AddMessage(text);
                 return text;
             }
         }
@@ -190,11 +214,12 @@ public class MessageGenerator(AnthropicClient client, ILogger<MessageGenerator> 
 
         try
         {
+            var systemPrompt = BuildSystemPrompt(RankChangeSystemPrompt);
             var parameters = new MessageParameters
             {
                 Model = "claude-sonnet-4-6",
                 MaxTokens = 300,
-                System = [new SystemMessage(RankChangeSystemPrompt)],
+                System = [new SystemMessage(systemPrompt)],
                 Messages = [new Message(RoleType.User, prompt)]
             };
 
@@ -204,6 +229,7 @@ public class MessageGenerator(AnthropicClient client, ILogger<MessageGenerator> 
             if (!string.IsNullOrEmpty(text))
             {
                 logger.LogDebug("Generated rank change message for {Player}: {Message}", playerName, text);
+                messageHistory.AddMessage(text);
                 return text;
             }
         }
@@ -214,6 +240,27 @@ public class MessageGenerator(AnthropicClient client, ILogger<MessageGenerator> 
 
         var emoji = isPromotion ? "📈" : "📉";
         return $"{emoji} **{playerName}** went from **{oldRank}** to **{newRank}**. {(isPromotion ? "Let's go!" : "Yikes.")}";
+    }
+
+    private string BuildSystemPrompt(string basePrompt)
+    {
+        var style = StyleModifiers[Rng.Next(StyleModifiers.Length)];
+        var recentMessages = messageHistory.GetRecentMessages();
+
+        var prompt = $"{basePrompt}\n\nStyle for this message: {style}";
+
+        if (recentMessages.Count > 0)
+        {
+            var recentBlock = string.Join("\n---\n", recentMessages);
+            prompt += $"""
+
+                IMPORTANT — Here are your recent messages. You MUST vary your style, sentence structure, vocabulary, and opening words. Do NOT repeat phrases, patterns, or formats from these:
+
+                {recentBlock}
+                """;
+        }
+
+        return prompt;
     }
 
     private static string GetSquadFallbackMessage(List<PerformanceResult> results)
