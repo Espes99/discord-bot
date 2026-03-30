@@ -73,6 +73,9 @@ public class MatchDetailData
 
     [JsonPropertyName("rounds")]
     public List<MatchRound>? Rounds { get; set; }
+
+    [JsonPropertyName("kills")]
+    public List<MatchKill>? Kills { get; set; }
 }
 
 public class MatchDetailMetadata
@@ -199,26 +202,39 @@ public class MatchRound
 
 public class RoundPlayerStats
 {
-    [JsonPropertyName("player_puuid")]
-    public string? PlayerPuuid { get; set; }
-
-    [JsonPropertyName("kills")]
-    public List<RoundKill>? Kills { get; set; }
+    [JsonPropertyName("player")]
+    public RoundPlayer? Player { get; set; }
 }
 
-public class RoundKill
+public class RoundPlayer
 {
-    [JsonPropertyName("finishing_damage")]
-    public FinishingDamage? FinishingDamage { get; set; }
+    [JsonPropertyName("puuid")]
+    public string Puuid { get; set; } = string.Empty;
 }
 
-public class FinishingDamage
+// Top-level kill entries under data.kills[]
+public class MatchKill
 {
-    [JsonPropertyName("damage_type")]
-    public string? DamageType { get; set; }
+    [JsonPropertyName("killer")]
+    public KillPlayer? Killer { get; set; }
 
-    [JsonPropertyName("damage_item")]
-    public string? DamageItem { get; set; }
+    [JsonPropertyName("weapon")]
+    public KillWeapon? Weapon { get; set; }
+}
+
+public class KillPlayer
+{
+    [JsonPropertyName("puuid")]
+    public string Puuid { get; set; } = string.Empty;
+}
+
+public class KillWeapon
+{
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+
+    [JsonPropertyName("type")]
+    public string? Type { get; set; }
 }
 
 // --- MMR / Rank (v3) ---

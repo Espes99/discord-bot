@@ -51,34 +51,30 @@ public static class WeaponClassifier
 
     public static WeaponContext ExtractForPlayer(MatchDetailData matchData, string puuid)
     {
-        if (matchData.Rounds is null || matchData.Rounds.Count == 0)
+        if (matchData.Kills is null || matchData.Kills.Count == 0)
             return new WeaponContext();
 
         var weaponCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         int precision = 0, nonPrecision = 0, total = 0;
 
-        foreach (var round in matchData.Rounds)
+        foreach (var kill in matchData.Kills)
         {
-            var playerStats = round.Stats?
-                .FirstOrDefault(s => string.Equals(s.PlayerPuuid, puuid, StringComparison.OrdinalIgnoreCase));
-            if (playerStats?.Kills is null) continue;
+            if (!string.Equals(kill.Killer?.Puuid, puuid, StringComparison.OrdinalIgnoreCase))
+                continue;
 
-            foreach (var kill in playerStats.Kills)
+            var weapon = kill.Weapon;
+            var category = Classify(weapon?.Name, weapon?.Type);
+
+            if (category == WeaponCategory.Unknown) continue;
+
+            total++;
+            if (category == WeaponCategory.Precision) precision++;
+            else nonPrecision++;
+
+            if (weapon?.Name is not null)
             {
-                var dmg = kill.FinishingDamage;
-                var category = Classify(dmg?.DamageItem, dmg?.DamageType);
-
-                if (category == WeaponCategory.Unknown) continue;
-
-                total++;
-                if (category == WeaponCategory.Precision) precision++;
-                else nonPrecision++;
-
-                if (dmg?.DamageItem is not null)
-                {
-                    weaponCounts.TryGetValue(dmg.DamageItem, out var count);
-                    weaponCounts[dmg.DamageItem] = count + 1;
-                }
+                weaponCounts.TryGetValue(weapon.Name, out var count);
+                weaponCounts[weapon.Name] = count + 1;
             }
         }
 
