@@ -14,6 +14,7 @@ public class Worker(
     IDiscordNotifier discord,
     IMatchTracker matchTracker,
     IMatchHistoryStore matchHistoryStore,
+    IPollStateStore pollStateStore,
     IServiceScopeFactory scopeFactory,
     IOptions<List<TrackedPlayer>> trackedPlayersOptions,
     IOptions<PollingSettings> pollingOptions,
@@ -37,7 +38,31 @@ public class Worker(
         logger.LogInformation("Polling {Count} tracked player(s) every {Interval}s",
             trackedPlayersOptions.Value.Count, interval.TotalSeconds);
 
-        // Check immediately on startup, then on each timer tick
+        // Check if enough time has passed since the last persisted poll
+        var lastPersistedPoll = pollStateStore.GetLastPollAt();
+        if (lastPersistedPoll is not null)
+        {
+            var elapsed = DateTimeOffset.UtcNow - lastPersistedPoll.Value;
+            if (elapsed < interval)
+            {
+                var remaining = interval - elapsed;
+                logger.LogInformation(
+                    "Last poll was {Elapsed}s ago, waiting {Remaining}s before first poll",
+                    (int)elapsed.TotalSeconds, (int)remaining.TotalSeconds);
+                await Task.Delay(remaining, stoppingToken);
+            }
+            else
+            {
+                logger.LogInformation(
+                    "Last poll was {Elapsed}s ago (>= interval), polling immediately",
+                    (int)elapsed.TotalSeconds);
+            }
+        }
+        else
+        {
+            logger.LogInformation("No previous poll state found, polling immediately");
+        }
+
         await PollAllPlayersAsync(stoppingToken);
 
         using var timer = new PeriodicTimer(interval);
@@ -52,6 +77,7 @@ public class Worker(
     private async Task PollAllPlayersAsync(CancellationToken ct)
     {
         _lastPollAt = DateTimeOffset.UtcNow;
+        pollStateStore.SetLastPollAt(_lastPollAt.Value);
         var players = trackedPlayersOptions.Value;
         logger.LogDebug("Polling {Count} player(s) for new matches", players.Count);
 

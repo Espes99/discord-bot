@@ -46,6 +46,7 @@ builder.Services.AddSingleton(new AnthropicClient(anthropicApiKey));
 // Services
 builder.Services.AddSingleton<IMatchTracker, MatchTracker>();
 builder.Services.AddSingleton<IMatchHistoryStore, MatchHistoryStore>();
+builder.Services.AddSingleton<IPollStateStore, PollStateStore>();
 builder.Services.AddSingleton<IPerformanceAnalyzer, PerformanceAnalyzer>();
 builder.Services.AddSingleton<IMessageGenerator, MessageGenerator>();
 builder.Services.AddSingleton<IDiscordNotifier, DiscordNotifier>();
