@@ -276,7 +276,7 @@ public class Worker(
 
     private async Task HandleStatusCommandAsync(SocketSlashCommand command)
     {
-        await command.DeferAsync();
+        await command.DeferAsync(ephemeral: true);
 
         try
         {
