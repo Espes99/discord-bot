@@ -24,7 +24,7 @@ public class PerformanceAnalyzer(ILogger<PerformanceAnalyzer> logger) : IPerform
         var weaponContext = WeaponClassifier.ExtractForPlayer(matchData, matchPlayer.Puuid);
 
         if (weaponContext.HasData)
-            logger.LogDebug(
+            logger.LogInformation(
                 "[WeaponContext] {Player}: {Total} tracked kills — {Precision} precision, {NonPrecision} non-precision ({PrecisionPct:F0}%). Most used: {MostUsed}. LowHsExpected={LowHsExpected}",
                 $"{matchPlayer.Name}#{matchPlayer.Tag}",
                 weaponContext.TotalWeaponKills,
@@ -34,8 +34,8 @@ public class PerformanceAnalyzer(ILogger<PerformanceAnalyzer> logger) : IPerform
                 weaponContext.MostUsedWeapon ?? "unknown",
                 weaponContext.LowHsExpected);
         else
-            logger.LogDebug(
-                "[WeaponContext] {Player}: no kill data available, weapon context inactive",
+            logger.LogWarning(
+                "[WeaponContext] {Player}: no kill data from API — weapon context inactive (kills array empty or null)",
                 $"{matchPlayer.Name}#{matchPlayer.Tag}");
 
         var rating = Evaluate(stats.Kda, acs, stats.HeadshotPercentage, weaponContext, matchPlayer, logger);

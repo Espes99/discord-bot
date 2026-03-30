@@ -60,8 +60,8 @@ public class HenrikDevClient(HttpClient httpClient, ILogger<HenrikDevClient> log
 
         var body = await response.Content.ReadAsStringAsync(ct);
         var result = JsonSerializer.Deserialize<MatchDetailResponse>(body);
-        logger.LogDebug("Deserialized match {MatchId}: {PlayerCount} players, {TeamCount} teams",
-            matchId, result?.Data?.Players?.Count ?? 0, result?.Data?.Teams?.Count ?? 0);
+        logger.LogInformation("Deserialized match {MatchId}: {PlayerCount} players, {TeamCount} teams, {KillCount} kills",
+            matchId, result?.Data?.Players?.Count ?? 0, result?.Data?.Teams?.Count ?? 0, result?.Data?.Kills?.Count ?? 0);
 
         return result?.Data;
     }
