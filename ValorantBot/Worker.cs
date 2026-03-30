@@ -42,6 +42,9 @@ public class Worker(
         var lastPersistedPoll = pollStateStore.GetLastPollAt();
         if (lastPersistedPoll is not null)
         {
+            _lastPollAt = lastPersistedPoll.Value;
+            _nextPollAt = lastPersistedPoll.Value + interval;
+
             var elapsed = DateTimeOffset.UtcNow - lastPersistedPoll.Value;
             if (elapsed < interval)
             {
