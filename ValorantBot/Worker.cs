@@ -194,11 +194,11 @@ public class Worker(
             // Uptime & polling info
             var uptimeText = FormatUptime(uptime);
             var pollText = _lastPollAt.HasValue
-                ? $"<t:{_lastPollAt.Value.ToUnixTimeSeconds()}:R>"
+                ? FormatRelativeTime(DateTimeOffset.UtcNow - _lastPollAt.Value) + " ago"
                 : "Not yet";
 
             var nextPollText = _nextPollAt.HasValue
-                ? $"<t:{_nextPollAt.Value.ToUnixTimeSeconds()}:R>"
+                ? "in " + FormatRelativeTime(_nextPollAt.Value - DateTimeOffset.UtcNow)
                 : "Pending";
 
             embed.AddField("Uptime", uptimeText, inline: true);
@@ -265,6 +265,17 @@ public class Worker(
             logger.LogError(ex, "Failed to handle /status command");
             await command.FollowupAsync("Failed to retrieve bot status.");
         }
+    }
+
+    private static string FormatRelativeTime(TimeSpan duration)
+    {
+        var total = duration < TimeSpan.Zero ? TimeSpan.Zero : duration;
+        var minutes = (int)total.TotalMinutes;
+        var seconds = total.Seconds;
+
+        if (minutes > 0)
+            return $"{minutes} minutes and {seconds} seconds";
+        return $"{seconds} seconds";
     }
 
     private static string FormatUptime(TimeSpan uptime)
