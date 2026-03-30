@@ -403,14 +403,11 @@ public class Worker(
                     ? $"{entry.Rank} - {rrText}{indicator}"
                     : entry.Rank;
 
+                var iconUrl = GetRankIconUrl(entry.Rank);
                 var embedBuilder = new EmbedBuilder()
-                    .WithAuthor($"{medal} {entry.Player.Name}#{entry.Player.Tag}")
+                    .WithAuthor($"{medal} {entry.Player.Name}#{entry.Player.Tag}", iconUrl: iconUrl)
                     .WithDescription(description)
                     .WithColor(color);
-
-                var iconUrl = GetRankIconUrl(entry.Rank);
-                if (iconUrl is not null)
-                    embedBuilder.WithThumbnailUrl(iconUrl);
 
                 if (i == sorted.Count - 1 || i == 9)
                     embedBuilder.WithFooter("Valorant Bot").WithTimestamp(DateTimeOffset.UtcNow);
