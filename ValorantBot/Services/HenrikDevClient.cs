@@ -97,6 +97,23 @@ public class HenrikDevClient(HttpClient httpClient, ILogger<HenrikDevClient> log
             try
             {
                 var response = await httpClient.GetAsync(url, ct);
+
+                if (response.StatusCode == HttpStatusCode.TooManyRequests)
+                {
+                    if (attempt == MaxRetries)
+                    {
+                        logger.LogError("Rate limited on all {MaxRetries} attempts to {Url}, skipping", MaxRetries, url);
+                        return null;
+                    }
+
+                    var retryAfter = response.Headers.RetryAfter?.Delta
+                        ?? TimeSpan.FromSeconds(RetryDelay.TotalSeconds * attempt);
+                    logger.LogWarning("Rate limited on {Url} (attempt {Attempt}/{MaxRetries}), retrying after {Delay}s",
+                        url, attempt, MaxRetries, retryAfter.TotalSeconds);
+                    await Task.Delay(retryAfter, ct);
+                    continue;
+                }
+
                 return response;
             }
             catch (HttpRequestException ex)
