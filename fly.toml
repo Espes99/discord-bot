@@ -1,0 +1,17 @@
+# fly.toml app configuration file generated for discord-bot-late-meadow-8094 on 2026-03-30T13:45:05+02:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'discord-bot-late-meadow-8094'
+primary_region = 'lhr'
+
+[build]
+
+[processes]
+  worker = 'dotnet ValorantBot.dll'
+
+[[vm]]
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 256
