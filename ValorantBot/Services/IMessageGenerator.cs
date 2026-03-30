@@ -21,4 +21,9 @@ public interface IMessageGenerator
     /// <param name="histories">Optional history summaries keyed by player name#tag.</param>
     /// <returns>A formatted Discord message roasting the whole squad.</returns>
     Task<string> GenerateSquadMessageAsync(List<PerformanceResult> results, Dictionary<string, PlayerHistorySummary>? histories = null);
+
+    /// <summary>
+    /// Generates a celebration or roast message for a rank change.
+    /// </summary>
+    Task<string> GenerateRankChangeMessageAsync(string playerName, string oldRank, string newRank, bool isPromotion, bool isMajorChange);
 }

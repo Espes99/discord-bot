@@ -213,6 +213,41 @@ public class DiscordNotifier : IDiscordNotifier
     }
 
     /// <inheritdoc />
+    public async Task<bool> SendRankChangeMessageAsync(string playerName, string oldRank, string newRank, bool isPromotion, bool isMajorChange)
+    {
+        if (!_isReady)
+        {
+            _logger.LogWarning("Discord client not ready, skipping rank change message");
+            return false;
+        }
+
+        var channel = _client.GetChannel(_settings.ChannelId) as IMessageChannel;
+        if (channel is null)
+        {
+            _logger.LogError("Could not find channel {ChannelId}", _settings.ChannelId);
+            return false;
+        }
+
+        var message = await _messageGenerator.GenerateRankChangeMessageAsync(playerName, oldRank, newRank, isPromotion, isMajorChange);
+
+        var color = isPromotion ? Color.Green : Color.Red;
+        var arrow = isPromotion ? "⬆️" : "⬇️";
+        var embed = new EmbedBuilder()
+            .WithTitle($"{arrow} Rank Change: {playerName}")
+            .WithColor(color)
+            .AddField("Previous Rank", oldRank, inline: true)
+            .AddField("New Rank", newRank, inline: true)
+            .WithFooter("Valorant Bot")
+            .WithTimestamp(DateTimeOffset.UtcNow)
+            .Build();
+
+        await channel.SendMessageAsync(text: message, embed: embed);
+        _logger.LogInformation("Sent rank change message for {Player}: {Old} -> {New}",
+            playerName, oldRank, newRank);
+        return true;
+    }
+
+    /// <inheritdoc />
     public async Task StopAsync()
     {
         if (_client.LoginState == LoginState.LoggedIn)

@@ -20,6 +20,8 @@ public class MatchHistoryEntry
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public PerformanceRating Rating { get; init; }
 
+    public string? Rank { get; init; }
+
     public static MatchHistoryEntry FromPerformanceResult(PerformanceResult result) => new()
     {
         MatchId = result.MatchData.Metadata.MatchId,
@@ -34,6 +36,7 @@ public class MatchHistoryEntry
         Acs = result.Acs,
         Kda = result.MatchPlayer.Stats.Kda,
         HeadshotPercent = result.MatchPlayer.Stats.HeadshotPercentage,
-        Rating = result.Rating
+        Rating = result.Rating,
+        Rank = result.MatchPlayer.Tier?.Name
     };
 }

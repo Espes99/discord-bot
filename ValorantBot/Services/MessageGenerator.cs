@@ -41,6 +41,21 @@ public class MessageGenerator(AnthropicClient client, ILogger<MessageGenerator> 
         - Do NOT use any prefix or label. Just output the message directly.
         """;
 
+    private const string RankChangeSystemPrompt = """
+        You are a toxic but funny Discord bot that reacts to Valorant rank changes. Important to be creative with insults and use swear words and foul language to really drive the point home.
+
+        Rules:
+        - Keep messages short (1-3 sentences max)
+        - Use Discord markdown (**bold**, etc.) and emojis
+        - For promotions: be funny and celebratory, but still throw in some shade (e.g. "finally", "took you long enough", "boosted?")
+        - For demotions: be absolutely savage. Mock them, question their life choices, suggest they uninstall
+        - Reference the specific ranks involved (old rank and new rank)
+        - For MAJOR tier changes (crossing a full tier boundary like Silver to Gold, Plat to Diamond): go all out. Make it dramatic and over the top. For promotions, act like they just won Worlds. For demotions, treat it like a tragedy of epic proportions.
+        - For minor rank changes (within the same tier, like Gold 1 to Gold 2): keep it chill, a quick quip is enough
+        - Never be mean-spirited about real personal things — keep it about the game
+        - Do NOT use any prefix or label. Just output the message directly.
+        """;
+
     /// <inheritdoc />
     public async Task<string> GenerateMessageAsync(PerformanceResult result, PlayerHistorySummary? history = null)
     {
@@ -137,6 +152,49 @@ public class MessageGenerator(AnthropicClient client, ILogger<MessageGenerator> 
         }
 
         return GetSquadFallbackMessage(results);
+    }
+
+    /// <inheritdoc />
+    public async Task<string> GenerateRankChangeMessageAsync(string playerName, string oldRank, string newRank, bool isPromotion, bool isMajorChange)
+    {
+        var direction = isPromotion ? "PROMOTED" : "DEMOTED";
+        var majorLabel = isMajorChange ? "MAJOR TIER CHANGE (crossed a full tier boundary, e.g. Silver to Gold)" : "Minor rank change (within same tier)";
+        var prompt = $"""
+            Player: {playerName}
+            Rank change: {direction}
+            Old rank: {oldRank}
+            New rank: {newRank}
+            Significance: {majorLabel}
+
+            Generate a single Discord message reacting to this rank change.
+            """;
+
+        try
+        {
+            var parameters = new MessageParameters
+            {
+                Model = "claude-sonnet-4-6",
+                MaxTokens = 300,
+                System = [new SystemMessage(RankChangeSystemPrompt)],
+                Messages = [new Message(RoleType.User, prompt)]
+            };
+
+            var response = await client.Messages.GetClaudeMessageAsync(parameters);
+            var text = response.Content.FirstOrDefault()?.ToString()?.Trim();
+
+            if (!string.IsNullOrEmpty(text))
+            {
+                logger.LogDebug("Generated rank change message for {Player}: {Message}", playerName, text);
+                return text;
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to generate AI rank change message, using fallback");
+        }
+
+        var emoji = isPromotion ? "📈" : "📉";
+        return $"{emoji} **{playerName}** went from **{oldRank}** to **{newRank}**. {(isPromotion ? "Let's go!" : "Yikes.")}";
     }
 
     private static string GetSquadFallbackMessage(List<PerformanceResult> results)

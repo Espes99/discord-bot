@@ -40,6 +40,11 @@ public interface IDiscordNotifier : IAsyncDisposable
     Task<bool> SendSquadMessageAsync(List<PerformanceResult> results);
 
     /// <summary>
+    /// Sends a rank change announcement to the configured channel.
+    /// </summary>
+    Task<bool> SendRankChangeMessageAsync(string playerName, string oldRank, string newRank, bool isPromotion, bool isMajorChange);
+
+    /// <summary>
     /// Disconnects the bot from Discord.
     /// </summary>
     Task StopAsync();

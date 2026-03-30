@@ -69,6 +69,20 @@ public class MatchHistoryStore : IMatchHistoryStore
         }
     }
 
+    public string? GetLastRank(string playerKey)
+    {
+        lock (_lock)
+        {
+            if (!_history.TryGetValue(playerKey, out var entries) || entries.Count == 0)
+                return null;
+
+            return entries
+                .OrderByDescending(e => e.PlayedAt)
+                .Select(e => e.Rank)
+                .FirstOrDefault(r => !string.IsNullOrEmpty(r));
+        }
+    }
+
     private void Load()
     {
         if (!File.Exists(_filePath))

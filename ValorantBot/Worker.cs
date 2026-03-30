@@ -93,8 +93,10 @@ public class Worker(
             if (sent)
             {
                 var playerKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
+                var previousRank = matchHistoryStore.GetLastRank(playerKey);
                 matchTracker.SetLastMatch(playerKey, result.MatchData.Metadata.MatchId);
                 matchHistoryStore.AddMatch(playerKey, MatchHistoryEntry.FromPerformanceResult(result));
+                await CheckAndAnnounceRankChangeAsync(result, playerKey, previousRank);
             }
         }
 
@@ -112,11 +114,71 @@ public class Worker(
                 foreach (var result in members)
                 {
                     var playerKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
+                    var previousRank = matchHistoryStore.GetLastRank(playerKey);
                     matchTracker.SetLastMatch(playerKey, result.MatchData.Metadata.MatchId);
                     matchHistoryStore.AddMatch(playerKey, MatchHistoryEntry.FromPerformanceResult(result));
+                    await CheckAndAnnounceRankChangeAsync(result, playerKey, previousRank);
                 }
             }
         }
+    }
+
+    private async Task CheckAndAnnounceRankChangeAsync(PerformanceResult result, string playerKey, string? previousRank)
+    {
+        var currentRank = result.MatchPlayer.Tier?.Name;
+        if (string.IsNullOrEmpty(currentRank) || string.IsNullOrEmpty(previousRank))
+        {
+            if (!string.IsNullOrEmpty(currentRank) && string.IsNullOrEmpty(previousRank))
+                logger.LogInformation("Seeding initial rank for {Key}: {Rank}", playerKey, currentRank);
+            return;
+        }
+
+        if (string.Equals(currentRank, previousRank, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var isPromotion = IsPromotion(previousRank, currentRank);
+        var isMajor = IsMajorRankChange(previousRank, currentRank);
+        logger.LogInformation("Rank change for {Key}: {Old} -> {New} ({Direction}, {Severity})",
+            playerKey, previousRank, currentRank,
+            isPromotion ? "promotion" : "demotion",
+            isMajor ? "major" : "minor");
+
+        try
+        {
+            await discord.SendRankChangeMessageAsync(
+                $"{result.MatchPlayer.Name}#{result.MatchPlayer.Tag}",
+                previousRank, currentRank, isPromotion, isMajor);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send rank change message for {Key}", playerKey);
+        }
+    }
+
+    private static bool IsPromotion(string oldRank, string newRank)
+    {
+        var rankOrder = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Iron 1"] = 1, ["Iron 2"] = 2, ["Iron 3"] = 3,
+            ["Bronze 1"] = 4, ["Bronze 2"] = 5, ["Bronze 3"] = 6,
+            ["Silver 1"] = 7, ["Silver 2"] = 8, ["Silver 3"] = 9,
+            ["Gold 1"] = 10, ["Gold 2"] = 11, ["Gold 3"] = 12,
+            ["Platinum 1"] = 13, ["Platinum 2"] = 14, ["Platinum 3"] = 15,
+            ["Diamond 1"] = 16, ["Diamond 2"] = 17, ["Diamond 3"] = 18,
+            ["Ascendant 1"] = 19, ["Ascendant 2"] = 20, ["Ascendant 3"] = 21,
+            ["Immortal 1"] = 22, ["Immortal 2"] = 23, ["Immortal 3"] = 24,
+            ["Radiant"] = 25
+        };
+
+        var oldOrder = rankOrder.GetValueOrDefault(oldRank, 0);
+        var newOrder = rankOrder.GetValueOrDefault(newRank, 0);
+        return newOrder > oldOrder;
+    }
+
+    private static bool IsMajorRankChange(string oldRank, string newRank)
+    {
+        var tierOf = (string rank) => rank.Split(' ')[0];
+        return !string.Equals(tierOf(oldRank), tierOf(newRank), StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<PerformanceResult?> GetNewMatchResultAsync(TrackedPlayer player, CancellationToken ct)
