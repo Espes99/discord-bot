@@ -20,6 +20,9 @@ public class DiscordNotifier : IDiscordNotifier
     /// <inheritdoc />
     public event Func<SocketSlashCommand, Task>? OnLatestCommand;
 
+    /// <inheritdoc />
+    public event Func<SocketSlashCommand, Task>? OnStatusCommand;
+
     private readonly IMatchHistoryStore _historyStore;
 
     public DiscordNotifier(
@@ -58,6 +61,10 @@ public class DiscordNotifier : IDiscordNotifier
             .AddOption("name", ApplicationCommandOptionType.String, "Player name", isRequired: true)
             .AddOption("tag", ApplicationCommandOptionType.String, "Player tag (e.g. 1234)", isRequired: true);
 
+        var statusCommand = new SlashCommandBuilder()
+            .WithName("status")
+            .WithDescription("Show bot status, tracked players, and recent activity");
+
         var guild = _client.GetGuild(_settings.GuildId);
         if (guild is null)
         {
@@ -66,7 +73,10 @@ public class DiscordNotifier : IDiscordNotifier
             return;
         }
 
-        await guild.CreateApplicationCommandAsync(latestCommand.Build());
+        await guild.BulkOverwriteApplicationCommandAsync([
+            latestCommand.Build(),
+            statusCommand.Build()
+        ]);
 
         _isReady = true;
         _readyTcs.TrySetResult();
@@ -75,12 +85,21 @@ public class DiscordNotifier : IDiscordNotifier
 
     private async Task OnSlashCommandExecutedAsync(SocketSlashCommand command)
     {
-        if (command.Data.Name == "latest")
+        switch (command.Data.Name)
         {
-            if (OnLatestCommand is not null)
-                await OnLatestCommand.Invoke(command);
-            else
-                await command.RespondAsync("Bot is not fully initialized yet.");
+            case "latest":
+                if (OnLatestCommand is not null)
+                    await OnLatestCommand.Invoke(command);
+                else
+                    await command.RespondAsync("Bot is not fully initialized yet.");
+                break;
+
+            case "status":
+                if (OnStatusCommand is not null)
+                    await OnStatusCommand.Invoke(command);
+                else
+                    await command.RespondAsync("Bot is not fully initialized yet.");
+                break;
         }
     }
 

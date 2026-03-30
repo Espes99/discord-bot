@@ -14,4 +14,9 @@ public interface IMatchTracker
     /// Records a match as seen for the given player and persists to disk.
     /// </summary>
     void SetLastMatch(string playerKey, string matchId);
+
+    /// <summary>
+    /// Returns the last-seen match ID for the given player, or null if none tracked.
+    /// </summary>
+    string? GetLastMatchId(string playerKey);
 }

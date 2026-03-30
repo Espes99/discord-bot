@@ -14,6 +14,11 @@ public interface IDiscordNotifier : IAsyncDisposable
     event Func<SocketSlashCommand, Task>? OnLatestCommand;
 
     /// <summary>
+    /// Raised when a user invokes the /status slash command.
+    /// </summary>
+    event Func<SocketSlashCommand, Task>? OnStatusCommand;
+
+    /// <summary>
     /// Connects the bot to Discord and registers slash commands.
     /// </summary>
     Task StartAsync(CancellationToken ct);

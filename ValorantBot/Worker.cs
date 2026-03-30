@@ -1,3 +1,4 @@
+using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.Options;
 using ValorantBot.Models;
@@ -18,11 +19,16 @@ public class Worker(
     IOptions<PollingSettings> pollingOptions,
     ILogger<Worker> logger) : BackgroundService
 {
+    private readonly DateTimeOffset _startedAt = DateTimeOffset.UtcNow;
+    private DateTimeOffset? _lastPollAt;
+    private DateTimeOffset? _nextPollAt;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("Starting Valorant Bot");
 
         discord.OnLatestCommand += HandleLatestCommandAsync;
+        discord.OnStatusCommand += HandleStatusCommandAsync;
         await discord.StartAsync(stoppingToken);
         await discord.WaitUntilReadyAsync(stoppingToken);
 
@@ -34,14 +40,17 @@ public class Worker(
         await PollAllPlayersAsync(stoppingToken);
 
         using var timer = new PeriodicTimer(interval);
+        _nextPollAt = DateTimeOffset.UtcNow + interval;
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
             await PollAllPlayersAsync(stoppingToken);
+            _nextPollAt = DateTimeOffset.UtcNow + interval;
         }
     }
 
     private async Task PollAllPlayersAsync(CancellationToken ct)
     {
+        _lastPollAt = DateTimeOffset.UtcNow;
         var players = trackedPlayersOptions.Value;
         logger.LogDebug("Polling {Count} player(s) for new matches", players.Count);
 
@@ -165,6 +174,108 @@ public class Worker(
             logger.LogError(ex, "Unexpected error checking {Name}#{Tag}", name, tag);
             await command.FollowupAsync($"Something went wrong checking {name}#{tag}.");
         }
+    }
+
+    private async Task HandleStatusCommandAsync(SocketSlashCommand command)
+    {
+        await command.DeferAsync();
+
+        try
+        {
+            var players = trackedPlayersOptions.Value;
+            var uptime = DateTimeOffset.UtcNow - _startedAt;
+            var interval = pollingOptions.Value.IntervalSeconds;
+
+            var embed = new EmbedBuilder()
+                .WithTitle("Valorant Bot Status")
+                .WithColor(Color.Blue)
+                .WithTimestamp(DateTimeOffset.UtcNow);
+
+            // Uptime & polling info
+            var uptimeText = FormatUptime(uptime);
+            var pollText = _lastPollAt.HasValue
+                ? $"<t:{_lastPollAt.Value.ToUnixTimeSeconds()}:R>"
+                : "Not yet";
+
+            var nextPollText = _nextPollAt.HasValue
+                ? $"<t:{_nextPollAt.Value.ToUnixTimeSeconds()}:R>"
+                : "Pending";
+
+            embed.AddField("Uptime", uptimeText, inline: true);
+            embed.AddField("Poll interval", $"{interval}s", inline: true);
+            embed.AddField("Last poll", pollText, inline: true);
+            embed.AddField("Next poll", nextPollText, inline: true);
+
+            // Tracked players
+            if (players.Count == 0)
+            {
+                embed.AddField("Tracked players", "None configured");
+            }
+            else
+            {
+                var playerLines = new List<string>();
+                foreach (var player in players)
+                {
+                    var key = MatchTracker.PlayerKey(player.Name, player.Tag);
+                    var lastMatchId = matchTracker.GetLastMatchId(key);
+                    var history = matchHistoryStore.GetHistory(key);
+                    var lastEntry = history
+                        .OrderByDescending(h => h.PlayedAt)
+                        .FirstOrDefault();
+
+                    var line = $"**{player.Name}#{player.Tag}** ({player.Region})";
+
+                    if (lastEntry is not null)
+                    {
+                        var won = lastEntry.Won ? "W" : "L";
+                        var timestamp = new DateTimeOffset(lastEntry.PlayedAt, TimeSpan.Zero).ToUnixTimeSeconds();
+                        line += $"\n> Last: {lastEntry.Map} ({won} {lastEntry.Score}) " +
+                                $"{lastEntry.Kills}/{lastEntry.Deaths}/{lastEntry.Assists} " +
+                                $"as {lastEntry.Agent} - <t:{timestamp}:R>";
+                    }
+                    else if (lastMatchId is not null)
+                    {
+                        line += "\n> Tracking active, no history stored yet";
+                    }
+                    else
+                    {
+                        line += "\n> No matches seen yet";
+                    }
+
+                    var matchCount = history.Count;
+                    if (matchCount > 0)
+                    {
+                        var wins = history.Count(h => h.Won);
+                        var losses = matchCount - wins;
+                        var avgAcs = history.Average(h => h.Acs);
+                        line += $"\n> History: {matchCount} matches, {wins}W/{losses}L, avg ACS {avgAcs:F0}";
+                    }
+
+                    playerLines.Add(line);
+                }
+
+                embed.AddField($"Tracked players ({players.Count})", string.Join("\n\n", playerLines));
+            }
+
+            embed.WithFooter("Valorant Bot");
+            await command.FollowupAsync(embed: embed.Build());
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to handle /status command");
+            await command.FollowupAsync("Failed to retrieve bot status.");
+        }
+    }
+
+    private static string FormatUptime(TimeSpan uptime)
+    {
+        if (uptime.TotalMinutes < 1)
+            return $"{uptime.Seconds}s";
+        if (uptime.TotalHours < 1)
+            return $"{uptime.Minutes}m {uptime.Seconds}s";
+        if (uptime.TotalDays < 1)
+            return $"{(int)uptime.TotalHours}h {uptime.Minutes}m";
+        return $"{(int)uptime.TotalDays}d {uptime.Hours}h {uptime.Minutes}m";
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)

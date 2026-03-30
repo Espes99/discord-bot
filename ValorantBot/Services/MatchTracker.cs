@@ -38,6 +38,14 @@ public class MatchTracker : IMatchTracker
         }
     }
 
+    public string? GetLastMatchId(string playerKey)
+    {
+        lock (_lock)
+        {
+            return _lastMatchIds.TryGetValue(playerKey, out var id) ? id : null;
+        }
+    }
+
     public static string PlayerKey(string name, string tag) => $"{name}#{tag}";
 
     private void Load()
