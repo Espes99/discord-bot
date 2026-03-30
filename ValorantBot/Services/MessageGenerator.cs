@@ -13,14 +13,19 @@ public class MessageGenerator(AnthropicClient client, ILogger<MessageGenerator> 
         You are a toxic but funny Discord bot that roasts Valorant players based on their match stats. Important to be creative with insults and use swear words and foul language to really drive the point home.
 
         Rules:
-        - Keep messages short (1-3 sentences max)
+        - Keep messages short (1-3 sentences max, or up to 4 if there's a rank change to address)
         - Use Discord markdown (**bold**, etc.) and emojis
         - Be savage when they play badly — really go for it
         - Reference specific stats (K/D/A, Combat Score, HS%, agent, map) to make the roast personal
         - For terrible/bad performance: be toxic and funny, mock them relentlessly
         - For average performance: be dismissive or backhanded
-        - Never be mean-spirited about real personal things — keep it about the game
+        - If a RANK CHANGE is included, weave it naturally into the match roast. Don't treat it as a separate topic.
+          - For promotions: throw shade ("finally", "boosted?") while acknowledging it
+          - For demotions: pile on extra, they played badly AND lost rank
+          - For MAJOR tier changes (e.g. Silver to Gold, Plat to Diamond): make it dramatic and over the top
+          - For minor rank changes (within same tier): a quick mention is enough
         - If player history is provided, reference trends to make roasts more personal (streaks, declining stats, map weaknesses, etc.)
+        - Never be mean-spirited about real personal things — keep it about the game
         - Do NOT use any prefix or label. Just output the message directly.
         """;
 
@@ -36,6 +41,9 @@ public class MessageGenerator(AnthropicClient client, ILogger<MessageGenerator> 
         - Reference specific stats (K/D/A, Combat Score, HS%, agent) to make roasts personal
         - If they lost, make it extra savage — they stacked and STILL lost
         - If they won, find the weak link who got carried
+        - If RANK CHANGES are included for any players, weave them naturally into the squad roast. Don't list them separately.
+          - For MAJOR tier changes: make it dramatic. Call out the player by name.
+          - For minor changes: a quick mention is enough
         - If player history is provided, reference trends to make roasts more personal (streaks, declining stats, etc.)
         - Never be mean-spirited about real personal things — keep it about the game
         - Do NOT use any prefix or label. Just output the message directly.
@@ -57,10 +65,13 @@ public class MessageGenerator(AnthropicClient client, ILogger<MessageGenerator> 
         """;
 
     /// <inheritdoc />
-    public async Task<string> GenerateMessageAsync(PerformanceResult result, PlayerHistorySummary? history = null)
+    public async Task<string> GenerateMessageAsync(PerformanceResult result, PlayerHistorySummary? history = null, RankChangeInfo? rankChange = null)
     {
         var stats = result.MatchPlayer.Stats;
         var historyBlock = history is not null ? $"\n{HistorySummarizer.FormatForPrompt(history)}\n" : "";
+        var rankBlock = rankChange is not null
+            ? $"\nRANK CHANGE: {(rankChange.IsPromotion ? "PROMOTED" : "DEMOTED")} from {rankChange.OldRank} to {rankChange.NewRank} ({(rankChange.IsMajor ? "MAJOR tier change" : "minor change")})\n"
+            : "";
         var prompt = $"""
             Player: {result.MatchPlayer.Name}#{result.MatchPlayer.Tag}
             Agent: {result.MatchPlayer.Agent.Name}
@@ -71,7 +82,7 @@ public class MessageGenerator(AnthropicClient client, ILogger<MessageGenerator> 
             KDA Ratio: {stats.Kda:F2}
             Headshot %: {stats.HeadshotPercentage:F1}%
             Performance Rating: {result.Rating}
-            {historyBlock}
+            {historyBlock}{rankBlock}
             Generate a single Discord message for this player's performance.
             """;
 
@@ -103,7 +114,7 @@ public class MessageGenerator(AnthropicClient client, ILogger<MessageGenerator> 
     }
 
     /// <inheritdoc />
-    public async Task<string> GenerateSquadMessageAsync(List<PerformanceResult> results, Dictionary<string, PlayerHistorySummary>? histories = null)
+    public async Task<string> GenerateSquadMessageAsync(List<PerformanceResult> results, Dictionary<string, PlayerHistorySummary>? histories = null, Dictionary<string, RankChangeInfo>? rankChanges = null)
     {
         var first = results[0];
         var playerStats = string.Join("\n", results.Select(r =>
@@ -113,8 +124,12 @@ public class MessageGenerator(AnthropicClient client, ILogger<MessageGenerator> 
             var historyLine = histories is not null && histories.TryGetValue(key, out var h)
                 ? $"\n    History: WR {h.WinRate:F0}%, Avg ACS {h.AverageAcs:F0}, Avg KDA {h.AverageKda:F2}, {(h.CurrentLossStreak > 1 ? $"{h.CurrentLossStreak} loss streak" : h.CurrentWinStreak > 1 ? $"{h.CurrentWinStreak} win streak" : "no streak")}"
                 : "";
+            var playerKey = MatchTracker.PlayerKey(r.Player.Name, r.Player.Tag);
+            var rankLine = rankChanges is not null && rankChanges.TryGetValue(playerKey, out var rc)
+                ? $"\n    RANK CHANGE: {(rc.IsPromotion ? "PROMOTED" : "DEMOTED")} from {rc.OldRank} to {rc.NewRank} ({(rc.IsMajor ? "MAJOR tier change" : "minor change")})"
+                : "";
             return $"""
-                - {key} | Agent: {r.MatchPlayer.Agent.Name} | K/D/A: {s.Kills}/{s.Deaths}/{s.Assists} | ACS: {r.Acs:F0} | KDA: {s.Kda:F2} | HS%: {s.HeadshotPercentage:F1}% | Rating: {r.Rating}{historyLine}
+                - {key} | Agent: {r.MatchPlayer.Agent.Name} | K/D/A: {s.Kills}/{s.Deaths}/{s.Assists} | ACS: {r.Acs:F0} | KDA: {s.Kda:F2} | HS%: {s.HeadshotPercentage:F1}% | Rating: {r.Rating}{historyLine}{rankLine}
                 """;
         }));
 

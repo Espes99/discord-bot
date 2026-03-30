@@ -89,14 +89,15 @@ public class Worker(
         // Send individual messages first, before squad messages
         foreach (var result in newResults.Where(r => !squadResults.Contains(r)))
         {
-            var sent = await discord.SendPerformanceMessageAsync(result);
+            var playerKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
+            var previousRank = matchHistoryStore.GetLastRank(playerKey);
+            var rankChange = DetectRankChange(result, previousRank);
+
+            var sent = await discord.SendPerformanceMessageAsync(result, rankChange);
             if (sent)
             {
-                var playerKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
-                var previousRank = matchHistoryStore.GetLastRank(playerKey);
                 matchTracker.SetLastMatch(playerKey, result.MatchData.Metadata.MatchId);
                 matchHistoryStore.AddMatch(playerKey, MatchHistoryEntry.FromPerformanceResult(result));
-                await CheckAndAnnounceRankChangeAsync(result, playerKey, previousRank);
             }
         }
 
@@ -108,33 +109,44 @@ public class Worker(
             logger.LogInformation("Stack detected! [{Players}] on same team in match {MatchId}",
                 names, squad.Key.MatchId);
 
-            var sent = await discord.SendSquadMessageAsync(members);
+            // Detect rank changes for all squad members before sending
+            var rankChanges = new Dictionary<string, RankChangeInfo>();
+            foreach (var result in members)
+            {
+                var playerKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
+                var previousRank = matchHistoryStore.GetLastRank(playerKey);
+                var rankChange = DetectRankChange(result, previousRank);
+                if (rankChange is not null)
+                    rankChanges[playerKey] = rankChange;
+            }
+
+            var sent = await discord.SendSquadMessageAsync(members, rankChanges.Count > 0 ? rankChanges : null);
             if (sent)
             {
                 foreach (var result in members)
                 {
                     var playerKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
-                    var previousRank = matchHistoryStore.GetLastRank(playerKey);
                     matchTracker.SetLastMatch(playerKey, result.MatchData.Metadata.MatchId);
                     matchHistoryStore.AddMatch(playerKey, MatchHistoryEntry.FromPerformanceResult(result));
-                    await CheckAndAnnounceRankChangeAsync(result, playerKey, previousRank);
                 }
             }
         }
     }
 
-    private async Task CheckAndAnnounceRankChangeAsync(PerformanceResult result, string playerKey, string? previousRank)
+    private RankChangeInfo? DetectRankChange(PerformanceResult result, string? previousRank)
     {
         var currentRank = result.MatchPlayer.Tier?.Name;
+        var playerKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
+
         if (string.IsNullOrEmpty(currentRank) || string.IsNullOrEmpty(previousRank))
         {
             if (!string.IsNullOrEmpty(currentRank) && string.IsNullOrEmpty(previousRank))
                 logger.LogInformation("Seeding initial rank for {Key}: {Rank}", playerKey, currentRank);
-            return;
+            return null;
         }
 
         if (string.Equals(currentRank, previousRank, StringComparison.OrdinalIgnoreCase))
-            return;
+            return null;
 
         var isPromotion = IsPromotion(previousRank, currentRank);
         var isMajor = IsMajorRankChange(previousRank, currentRank);
@@ -143,16 +155,13 @@ public class Worker(
             isPromotion ? "promotion" : "demotion",
             isMajor ? "major" : "minor");
 
-        try
+        return new RankChangeInfo
         {
-            await discord.SendRankChangeMessageAsync(
-                $"{result.MatchPlayer.Name}#{result.MatchPlayer.Tag}",
-                previousRank, currentRank, isPromotion, isMajor);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to send rank change message for {Key}", playerKey);
-        }
+            OldRank = previousRank,
+            NewRank = currentRank,
+            IsPromotion = isPromotion,
+            IsMajor = isMajor
+        };
     }
 
     private static bool IsPromotion(string oldRank, string newRank)

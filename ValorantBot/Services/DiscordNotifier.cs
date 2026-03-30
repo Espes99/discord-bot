@@ -126,7 +126,7 @@ public class DiscordNotifier : IDiscordNotifier
     public Task WaitUntilReadyAsync(CancellationToken ct) => _readyTcs.Task.WaitAsync(ct);
 
     /// <inheritdoc />
-    public async Task<bool> SendPerformanceMessageAsync(PerformanceResult result)
+    public async Task<bool> SendPerformanceMessageAsync(PerformanceResult result, RankChangeInfo? rankChange = null)
     {
         if (!_isReady)
         {
@@ -143,8 +143,8 @@ public class DiscordNotifier : IDiscordNotifier
 
         var playerKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
         var history = HistorySummarizer.Summarize(_historyStore.GetHistory(playerKey));
-        var message = await _messageGenerator.GenerateMessageAsync(result, history);
-        var embed = BuildEmbed(result);
+        var message = await _messageGenerator.GenerateMessageAsync(result, history, rankChange);
+        var embed = BuildEmbed(result, rankChange);
 
         await channel.SendMessageAsync(text: message, embed: embed);
         _logger.LogInformation("Sent {Rating} message for {Player} to Discord",
@@ -153,7 +153,7 @@ public class DiscordNotifier : IDiscordNotifier
     }
 
     /// <inheritdoc />
-    public async Task<bool> SendSquadMessageAsync(List<PerformanceResult> results)
+    public async Task<bool> SendSquadMessageAsync(List<PerformanceResult> results, Dictionary<string, RankChangeInfo>? rankChanges = null)
     {
         if (!_isReady)
         {
@@ -174,8 +174,13 @@ public class DiscordNotifier : IDiscordNotifier
             .Where(x => x.Summary is not null)
             .ToDictionary(x => x.Key, x => x.Summary!);
 
-        var message = await _messageGenerator.GenerateSquadMessageAsync(results, histories.Count > 0 ? histories : null);
-        var embeds = results.Select(BuildEmbed).ToArray();
+        var message = await _messageGenerator.GenerateSquadMessageAsync(results, histories.Count > 0 ? histories : null, rankChanges);
+        var embeds = results.Select(r =>
+        {
+            var playerKey = MatchTracker.PlayerKey(r.Player.Name, r.Player.Tag);
+            var rc = rankChanges is not null && rankChanges.TryGetValue(playerKey, out var change) ? change : null;
+            return BuildEmbed(r, rc);
+        }).ToArray();
         await channel.SendMessageAsync(text: message, embeds: embeds);
 
         var names = string.Join(", ", results.Select(r => r.Player.Name));
@@ -183,7 +188,7 @@ public class DiscordNotifier : IDiscordNotifier
         return true;
     }
 
-    private static Embed BuildEmbed(PerformanceResult result)
+    private static Embed BuildEmbed(PerformanceResult result, RankChangeInfo? rankChange = null)
     {
         var stats = result.MatchPlayer.Stats;
         var color = result.Rating switch
@@ -198,7 +203,7 @@ public class DiscordNotifier : IDiscordNotifier
 
         var outcomeEmoji = result.Won ? "✅" : "❌";
 
-        return new EmbedBuilder()
+        var builder = new EmbedBuilder()
             .WithTitle($"{result.MatchPlayer.Name}#{result.MatchPlayer.Tag} — {result.MapName}")
             .WithColor(color)
             .AddField("Result", $"{outcomeEmoji} {result.Score}", inline: true)
@@ -206,7 +211,15 @@ public class DiscordNotifier : IDiscordNotifier
             .AddField("K/D/A", $"{stats.Kills}/{stats.Deaths}/{stats.Assists}", inline: true)
             .AddField("ACS", $"{result.Acs:F0}", inline: true)
             .AddField("KDA", $"{stats.Kda:F2}", inline: true)
-            .AddField("HS%", $"{stats.HeadshotPercentage:F1}%", inline: true)
+            .AddField("HS%", $"{stats.HeadshotPercentage:F1}%", inline: true);
+
+        if (rankChange is not null)
+        {
+            var arrow = rankChange.IsPromotion ? "⬆️" : "⬇️";
+            builder.AddField($"{arrow} Rank Change", $"{rankChange.OldRank} → {rankChange.NewRank}", inline: false);
+        }
+
+        return builder
             .WithFooter("Valorant Bot")
             .WithTimestamp(DateTimeOffset.UtcNow)
             .Build();

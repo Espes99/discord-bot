@@ -32,15 +32,15 @@ public interface IDiscordNotifier : IAsyncDisposable
     /// Sends a performance message with an embed to the configured channel.
     /// Returns true if the message was sent, false if skipped.
     /// </summary>
-    Task<bool> SendPerformanceMessageAsync(PerformanceResult result);
+    Task<bool> SendPerformanceMessageAsync(PerformanceResult result, RankChangeInfo? rankChange = null);
 
     /// <summary>
     /// Sends a squad roast message with individual embeds when players queued together.
     /// </summary>
-    Task<bool> SendSquadMessageAsync(List<PerformanceResult> results);
+    Task<bool> SendSquadMessageAsync(List<PerformanceResult> results, Dictionary<string, RankChangeInfo>? rankChanges = null);
 
     /// <summary>
-    /// Sends a rank change announcement to the configured channel.
+    /// Sends a standalone rank change announcement. Used as fallback only.
     /// </summary>
     Task<bool> SendRankChangeMessageAsync(string playerName, string oldRank, string newRank, bool isPromotion, bool isMajorChange);
 
