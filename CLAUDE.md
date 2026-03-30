@@ -42,7 +42,8 @@ Triggered on-demand via the `/latest-match` Discord slash command — no polling
 - `DiscordBot.Token` / `DiscordBot.ChannelId` — from Discord Developer Portal
 - `HenrikDevValorantApi.ApiKey` — from api.henrikdev.xyz dashboard
 - `Anthropic.ApiKey` — from console.anthropic.com
-- `TrackedPlayers` — array of `{ Name, Tag, Region }` for players to track
+
+Tracked players are managed dynamically via `/track` and `/untrack` Discord commands and persisted to `/data/tracked_players.json` (not in appsettings).
 
 ## Key Dependencies
 

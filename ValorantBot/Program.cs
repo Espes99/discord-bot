@@ -18,7 +18,6 @@ builder.Services
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
-builder.Services.Configure<List<TrackedPlayer>>(builder.Configuration.GetSection("TrackedPlayers"));
 builder.Services.Configure<BotAdminSettings>(builder.Configuration.GetSection("BotAdmin"));
 
 builder.Services

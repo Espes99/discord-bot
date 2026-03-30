@@ -16,7 +16,6 @@ public class Worker(
     IMatchHistoryStore matchHistoryStore,
     IPollStateStore pollStateStore,
     IServiceScopeFactory scopeFactory,
-    IOptions<List<TrackedPlayer>> trackedPlayersOptions,
     IOptions<PollingSettings> pollingOptions,
     IOptions<BotAdminSettings> botAdminOptions,
     ITrackedPlayerStore trackedPlayerStore,
@@ -37,12 +36,6 @@ public class Worker(
         discord.OnUntrackCommand += HandleUntrackCommandAsync;
         await discord.StartAsync(stoppingToken);
         await discord.WaitUntilReadyAsync(stoppingToken);
-
-        // Seed tracked players from config into the persistent store
-        var seedPlayers = trackedPlayersOptions.Value;
-        var seeded = seedPlayers.Count(p => trackedPlayerStore.Add(p));
-        if (seeded > 0)
-            logger.LogInformation("Seeded {Count} player(s) from config into tracked player store", seeded);
 
         var interval = TimeSpan.FromSeconds(pollingOptions.Value.IntervalSeconds);
         logger.LogInformation("Polling {Count} tracked player(s) every {Interval}s",
