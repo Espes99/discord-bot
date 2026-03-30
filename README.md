@@ -31,6 +31,8 @@ Players can also trigger a check on-demand using the `/latest-match <name> <tag>
 | Command                      | Description                                                                                                                                       |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/latest-match <name> <tag>` | On-demand lookup of the latest competitive match for any player. Returns an AI-generated message and a stats embed.                               |
+| `/track <name> <tag> [region]` | Add a player to the tracked list (admin only). Persisted to `data/tracked_players.json`.                                                        |
+| `/untrack <name> <tag>`      | Remove a player from the tracked list (admin only).                                                                                               |
 | `/status`                    | Bot dashboard showing uptime, polling interval, last/next poll times, and per-player stats (last match, history summary, agents played, streaks). |
 | `/ranks`                     | Ranked leaderboard for all tracked players, sorted by tier and RR. Shows promotion/demotion indicators.                                           |
 
@@ -57,8 +59,8 @@ cp ValorantBot/appsettings.example.json ValorantBot/appsettings.json
 | `DiscordBot.GuildId`          | Discord server (guild) ID                             |
 | `HenrikDevValorantApi.ApiKey` | HenrikDev API key                                     |
 | `Anthropic.ApiKey`            | Anthropic API key                                     |
-| `TrackedPlayers`              | Array of `{ Name, Tag, Region }` for players to track |
 | `Polling.IntervalSeconds`     | Polling interval in seconds (default: 1200)           |
+| `BotAdmin.AllowedUserIds`    | Array of Discord user IDs allowed to use `/track` and `/untrack` commands |
 
 ## Data Persistence
 
@@ -66,9 +68,11 @@ The bot stores state in the `data/` directory (created automatically):
 
 | File                 | Purpose                                                                             |
 | -------------------- | ----------------------------------------------------------------------------------- |
-| `last_matches.json`  | Last seen match ID per player, used to prevent duplicate messages                   |
-| `match_history.json` | Last 20 match records per player, used for trend analysis and AI context            |
-| `poll_state.json`    | Timestamp of last poll, used to skip polling on restart if interval has not elapsed |
+| `tracked_players.json` | Tracked players list, managed via `/track` and `/untrack` commands                |
+| `last_matches.json`   | Last seen match ID per player, used to prevent duplicate messages                  |
+| `match_history.json`  | Last 20 match records per player, used for trend analysis and AI context           |
+| `message_history.json` | Recent AI-generated messages, used to avoid repetitive messages                   |
+| `poll_state.json`     | Timestamp of last poll, used to skip polling on restart if interval has not elapsed |
 
 ## Running Locally
 
@@ -112,6 +116,7 @@ fly secrets set DiscordBot__GuildId="..."
 fly secrets set HenrikDevValorantApi__ApiKey="..."
 fly secrets set Anthropic__ApiKey="..."
 fly secrets set Polling__IntervalSeconds=1200
+fly secrets set BotAdmin__AllowedUserIds__0=123456789012345678
 ```
 
 Data is persisted via a Fly volume mounted at `/data`. Create it before the first deploy:
