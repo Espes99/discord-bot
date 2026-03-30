@@ -15,15 +15,15 @@ No tests exist yet.
 
 A .NET 9 Worker Service Discord bot that checks Valorant match stats for tracked players via the HenrikDev API, then uses Claude Sonnet to generate banter/roast messages and posts them to a Discord channel.
 
-Triggered on-demand via the `/latest` Discord slash command — no polling or scheduling.
+Triggered on-demand via the `/latest-match` Discord slash command — no polling or scheduling.
 
 ## Architecture
 
-**Entry flow:** `Program.cs` (DI wiring) → `Worker.cs` (BackgroundService) → connects Discord, registers `/latest` slash command, waits for invocations.
+**Entry flow:** `Program.cs` (DI wiring) → `Worker.cs` (BackgroundService) → connects Discord, registers `/latest-match` slash command, waits for invocations.
 
-**`/latest` command flow:**
+**`/latest-match` command flow:**
 
-1. `Worker.HandleLatestCommandAsync` iterates all tracked players from config
+1. `Worker.HandleLatestMatchCommandAsync` iterates all tracked players from config
 2. `HenrikDevClient` fetches recent matches (v4 matchlist endpoint), then full match details (v4 match endpoint) from HenrikDev API
 3. `PerformanceAnalyzer.Analyze` scores the player on KDA, ACS, and HS% → produces a `PerformanceRating` (Terrible through Excellent)
 4. `MessageGenerator` sends stats to Claude Sonnet with a system prompt requesting toxic/funny messages; falls back to static `MessageTemplates` on API failure

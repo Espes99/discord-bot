@@ -9,9 +9,9 @@ namespace ValorantBot.Services;
 public interface IDiscordNotifier : IAsyncDisposable
 {
     /// <summary>
-    /// Raised when a user invokes the /latest slash command.
+    /// Raised when a user invokes the /latest-match slash command.
     /// </summary>
-    event Func<SocketSlashCommand, Task>? OnLatestCommand;
+    event Func<SocketSlashCommand, Task>? OnLatestMatchCommand;
 
     /// <summary>
     /// Raised when a user invokes the /status slash command.

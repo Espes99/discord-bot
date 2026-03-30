@@ -28,7 +28,7 @@ public class Worker(
     {
         logger.LogInformation("Starting Valorant Bot");
 
-        discord.OnLatestCommand += HandleLatestCommandAsync;
+        discord.OnLatestMatchCommand += HandleLatestMatchCommandAsync;
         discord.OnStatusCommand += HandleStatusCommandAsync;
         discord.OnRanksCommand += HandleRanksCommandAsync;
         await discord.StartAsync(stoppingToken);
@@ -239,7 +239,7 @@ public class Worker(
         return result;
     }
 
-    private async Task HandleLatestCommandAsync(SocketSlashCommand command)
+    private async Task HandleLatestMatchCommandAsync(SocketSlashCommand command)
     {
         await command.DeferAsync();
 

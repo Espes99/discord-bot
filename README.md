@@ -11,7 +11,7 @@ A .NET 9 Discord bot that tracks Valorant match stats for configured players and
 5. Claude Sonnet generates a funny/toxic message based on performance, trends, and player history
 6. The message and a color-coded stats embed are posted to a configured Discord channel
 
-Players can also trigger a check on-demand using the `/latest <name> <tag>` slash command.
+Players can also trigger a check on-demand using the `/latest-match <name> <tag>` slash command.
 
 ## Features
 
@@ -28,11 +28,11 @@ Players can also trigger a check on-demand using the `/latest <name> <tag>` slas
 
 ## Slash Commands
 
-| Command                | Description                                                                                                                                       |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/latest <name> <tag>` | On-demand lookup of the latest competitive match for any player. Returns an AI-generated message and a stats embed.                               |
-| `/status`              | Bot dashboard showing uptime, polling interval, last/next poll times, and per-player stats (last match, history summary, agents played, streaks). |
-| `/ranks`               | Ranked leaderboard for all tracked players, sorted by tier and RR. Shows promotion/demotion indicators.                                           |
+| Command                      | Description                                                                                                                                       |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/latest-match <name> <tag>` | On-demand lookup of the latest competitive match for any player. Returns an AI-generated message and a stats embed.                               |
+| `/status`                    | Bot dashboard showing uptime, polling interval, last/next poll times, and per-player stats (last match, history summary, agents played, streaks). |
+| `/ranks`                     | Ranked leaderboard for all tracked players, sorted by tier and RR. Shows promotion/demotion indicators.                                           |
 
 ## Prerequisites
 

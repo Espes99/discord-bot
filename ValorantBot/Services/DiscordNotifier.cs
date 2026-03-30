@@ -18,7 +18,7 @@ public class DiscordNotifier : IDiscordNotifier
     private readonly TaskCompletionSource _readyTcs = new();
 
     /// <inheritdoc />
-    public event Func<SocketSlashCommand, Task>? OnLatestCommand;
+    public event Func<SocketSlashCommand, Task>? OnLatestMatchCommand;
 
     /// <inheritdoc />
     public event Func<SocketSlashCommand, Task>? OnStatusCommand;
@@ -59,8 +59,8 @@ public class DiscordNotifier : IDiscordNotifier
         _logger.LogInformation("Discord bot connected — registering slash commands...");
 
         var latestCommand = new SlashCommandBuilder()
-            .WithName("latest")
-            .WithDescription("Check the latest Valorant match for a player")
+            .WithName("latest-match")
+            .WithDescription("Check the latest Valorant match for a player with provided name and tag")
             .AddOption("name", ApplicationCommandOptionType.String, "Player name", isRequired: true)
             .AddOption("tag", ApplicationCommandOptionType.String, "Player tag (e.g. 1234)", isRequired: true);
 
@@ -88,16 +88,16 @@ public class DiscordNotifier : IDiscordNotifier
 
         _isReady = true;
         _readyTcs.TrySetResult();
-        _logger.LogInformation("Discord bot ready with /latest command");
+        _logger.LogInformation("Discord bot ready...");
     }
 
     private async Task OnSlashCommandExecutedAsync(SocketSlashCommand command)
     {
         switch (command.Data.Name)
         {
-            case "latest":
-                if (OnLatestCommand is not null)
-                    await OnLatestCommand.Invoke(command);
+            case "latest-match":
+                if (OnLatestMatchCommand is not null)
+                    await OnLatestMatchCommand.Invoke(command);
                 else
                     await command.RespondAsync("Bot is not fully initialized yet.");
                 break;
