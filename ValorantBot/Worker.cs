@@ -41,8 +41,6 @@ public class Worker(
         await discord.StartAsync(stoppingToken);
         await discord.WaitUntilReadyAsync(stoppingToken);
 
-        SeedAutoTraits();
-
         var interval = TimeSpan.FromSeconds(pollingOptions.Value.IntervalSeconds);
         logger.LogInformation("Polling {Count} tracked player(s) every {Interval}s",
             trackedPlayerStore.GetAll().Count, interval.TotalSeconds);
@@ -661,30 +659,6 @@ public class Worker(
             embed.AddField("Auto Traits", string.Join("\n", profile.AutoTraits.Select(t => $"- {t}")));
 
         await command.FollowupAsync(embed: embed.Build(), ephemeral: true);
-    }
-
-    private void SeedAutoTraits()
-    {
-        var players = trackedPlayerStore.GetAll();
-        var seeded = 0;
-
-        foreach (var player in players)
-        {
-            var playerKey = MatchTracker.PlayerKey(player.Name, player.Tag);
-            var profile = playerProfileStore.GetProfile(playerKey);
-            if (profile is { AutoTraits.Count: > 0 })
-                continue;
-
-            var history = matchHistoryStore.GetHistory(playerKey);
-            if (history.Count == 0)
-                continue;
-
-            UpdateAutoTraits(playerKey);
-            seeded++;
-        }
-
-        if (seeded > 0)
-            logger.LogInformation("Seeded auto traits for {Count} player(s)", seeded);
     }
 
     private void UpdateAutoTraits(string playerKey)
