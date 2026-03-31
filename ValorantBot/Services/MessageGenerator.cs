@@ -110,7 +110,7 @@ public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messa
         try
         {
             var systemPrompt = BuildSystemPrompt($"{BaseRules}\n{SoloRules}");
-            var text = await CallClaudeAsync(systemPrompt, prompt, 300);
+            var text = await CallClaudeAsync(systemPrompt, prompt, 600);
 
             if (!string.IsNullOrEmpty(text))
             {
@@ -161,7 +161,7 @@ public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messa
         try
         {
             var systemPrompt = BuildSystemPrompt($"{BaseRules}\n{SquadRules}");
-            var text = await CallClaudeAsync(systemPrompt, prompt, 500);
+            var text = await CallClaudeAsync(systemPrompt, prompt, 600);
 
             if (!string.IsNullOrEmpty(text))
             {
@@ -196,7 +196,7 @@ public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messa
         try
         {
             var systemPrompt = BuildSystemPrompt($"{BaseRules}\n{RankChangeRules}");
-            var text = await CallClaudeAsync(systemPrompt, prompt, 300);
+            var text = await CallClaudeAsync(systemPrompt, prompt, 600);
 
             if (!string.IsNullOrEmpty(text))
             {
@@ -224,8 +224,22 @@ public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messa
             Messages = [new Message(RoleType.User, userPrompt)]
         };
 
-        var response = await client.Messages.GetClaudeMessageAsync(parameters);
-        return response.Content.FirstOrDefault()?.ToString()?.Trim();
+        const int maxRetries = 3;
+        for (var attempt = 1; attempt <= maxRetries; attempt++)
+        {
+            try
+            {
+                var response = await client.Messages.GetClaudeMessageAsync(parameters);
+                return response.Content.FirstOrDefault()?.ToString()?.Trim();
+            }
+            catch (HttpRequestException) when (attempt < maxRetries)
+            {
+                logger.LogWarning("Claude API request failed (attempt {Attempt}/{MaxRetries}), retrying...", attempt, maxRetries);
+                await Task.Delay(attempt * 1000);
+            }
+        }
+
+        return null;
     }
 
     private string BuildSystemPrompt(string basePrompt)
