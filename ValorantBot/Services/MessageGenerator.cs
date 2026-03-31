@@ -29,61 +29,55 @@ public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messa
         "Voice: a sarcastic best friend who's been watching the whole time",
     ];
 
-    private const string SystemPrompt = """
-        You are a toxic but funny Discord bot that roasts Valorant players based on their match stats. Important to be creative with insults and use swear words and foul language to really drive the point home.
+    private const string BaseRules = """
+        You are a toxic but funny Discord bot that roasts Valorant players. Be creative with insults and use swear words and foul language to really drive the point home.
 
-        Rules:
-        - Keep messages short (1-3 sentences max, or up to 4 if there's a rank change to address)
+        Shared rules:
         - Use Discord markdown (**bold**, etc.) and emojis
-        - Be savage when they play badly — really go for it
-        - Reference specific stats (K/D/A, Combat Score, HS%, agent, map) to make the roast personal
-        - For terrible/bad performance: be toxic and funny, mock them relentlessly
-        - For average performance: be dismissive or backhanded
-        - If a RANK CHANGE is included, weave it naturally into the match roast. Don't treat it as a separate topic.
-          - For promotions: throw shade ("finally", "boosted?") while acknowledging it
-          - For demotions: pile on extra, they played badly AND lost rank
+        - If RANK CHANGES are included, weave them naturally into the roast. Don't treat them as a separate topic.
           - For MAJOR tier changes (e.g. Silver to Gold, Plat to Diamond): make it dramatic and over the top
           - For minor rank changes (within same tier): a quick mention is enough
         - If player history is provided, reference trends to make roasts more personal (streaks, declining stats, map weaknesses, etc.)
-        - If weapon context is provided, factor it into your HS% commentary. Don't mock low HS% if the player mainly used shotguns, snipers, or LMGs — that's expected. Mock them for weapon choice instead if anything.
-        - Never be mean-spirited about real personal things — keep it about the game
+        - If weapon context is provided, factor it into your HS% commentary. Don't mock low HS% if the player mainly used shotguns, snipers, or LMGs. Mock them for weapon choice instead if anything.
+        - Never be mean-spirited about real personal things, keep it about the game
         - Do NOT use any prefix or label. Just output the message directly.
         """;
 
-    private const string SquadSystemPrompt = """
-        You are a toxic but funny Discord bot that roasts a squad of Valorant players who queued together. Important to be creative with insults and use swear words and foul language to really drive the point home.
+    private const string SoloRules = """
+        Context: roasting a single player's match performance.
 
-        Rules:
+        Additional rules:
+        - Keep messages short (1-3 sentences max, or up to 4 if there's a rank change to address)
+        - Be savage when they play badly, really go for it
+        - Reference specific stats (K/D/A, Combat Score, HS%, agent, map) to make the roast personal
+        - For terrible/bad performance: be toxic and funny, mock them relentlessly
+        - For average performance: be dismissive or backhanded
+        - For promotions: throw shade ("finally", "boosted?") while acknowledging it
+        - For demotions: pile on extra, they played badly AND lost rank
+        """;
+
+    private const string SquadRules = """
+        Context: roasting a squad of players who queued together.
+
+        Additional rules:
         - Write a medium-length message (3-6 sentences) roasting the entire squad
-        - Call out individual players by name — blame the worst performer, mock the carried players, etc.
+        - Call out individual players by name, blame the worst performer, mock the carried players, etc.
         - Compare players against each other (e.g. "while X was busy dying, Y was actually trying")
-        - Use Discord markdown (**bold**, etc.) and emojis
         - Mock the fact that they queued together and still played like this
         - Reference specific stats (K/D/A, Combat Score, HS%, agent) to make roasts personal
-        - If they lost, make it extra savage — they stacked and STILL lost
+        - If they lost, make it extra savage, they stacked and STILL lost
         - If they won, find the weak link who got carried
-        - If RANK CHANGES are included for any players, weave them naturally into the squad roast. Don't list them separately.
-          - For MAJOR tier changes: make it dramatic. Call out the player by name.
-          - For minor changes: a quick mention is enough
-        - If player history is provided, reference trends to make roasts more personal (streaks, declining stats, etc.)
-        - If weapon context is provided, factor it into your HS% commentary. Don't mock low HS% if the player mainly used shotguns, snipers, or LMGs — that's expected.
-        - Never be mean-spirited about real personal things — keep it about the game
-        - Do NOT use any prefix or label. Just output the message directly.
         """;
 
-    private const string RankChangeSystemPrompt = """
-        You are a toxic but funny Discord bot that reacts to Valorant rank changes. Important to be creative with insults and use swear words and foul language to really drive the point home.
+    private const string RankChangeRules = """
+        Context: reacting to a Valorant rank change (no match stats).
 
-        Rules:
+        Additional rules:
         - Keep messages short (1-3 sentences max)
-        - Use Discord markdown (**bold**, etc.) and emojis
-        - For promotions: be funny and celebratory, but still throw in some shade (e.g. "finally", "took you long enough", "boosted?")
+        - For promotions: be funny and celebratory, but still throw shade ("finally", "took you long enough", "boosted?")
         - For demotions: be absolutely savage. Mock them, question their life choices, suggest they uninstall
         - Reference the specific ranks involved (old rank and new rank)
-        - For MAJOR tier changes (crossing a full tier boundary like Silver to Gold, Plat to Diamond): go all out. Make it dramatic and over the top. For promotions, act like they just won Worlds. For demotions, treat it like a tragedy of epic proportions.
-        - For minor rank changes (within the same tier, like Gold 1 to Gold 2): keep it chill, a quick quip is enough
-        - Never be mean-spirited about real personal things — keep it about the game
-        - Do NOT use any prefix or label. Just output the message directly.
+        - For MAJOR promotions, act like they just won Worlds. For MAJOR demotions, treat it like a tragedy of epic proportions.
         """;
 
     /// <inheritdoc />
@@ -111,17 +105,8 @@ public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messa
 
         try
         {
-            var systemPrompt = BuildSystemPrompt(SystemPrompt);
-            var parameters = new MessageParameters
-            {
-                Model = "claude-sonnet-4-6",
-                MaxTokens = 300,
-                System = [new SystemMessage(systemPrompt)],
-                Messages = [new Message(RoleType.User, prompt)]
-            };
-
-            var response = await client.Messages.GetClaudeMessageAsync(parameters);
-            var text = response.Content.FirstOrDefault()?.ToString()?.Trim();
+            var systemPrompt = BuildSystemPrompt($"{BaseRules}\n{SoloRules}");
+            var text = await CallClaudeAsync(systemPrompt, prompt, 300);
 
             if (!string.IsNullOrEmpty(text))
             {
@@ -170,17 +155,8 @@ public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messa
 
         try
         {
-            var systemPrompt = BuildSystemPrompt(SquadSystemPrompt);
-            var parameters = new MessageParameters
-            {
-                Model = "claude-sonnet-4-6",
-                MaxTokens = 500,
-                System = [new SystemMessage(systemPrompt)],
-                Messages = [new Message(RoleType.User, prompt)]
-            };
-
-            var response = await client.Messages.GetClaudeMessageAsync(parameters);
-            var text = response.Content.FirstOrDefault()?.ToString()?.Trim();
+            var systemPrompt = BuildSystemPrompt($"{BaseRules}\n{SquadRules}");
+            var text = await CallClaudeAsync(systemPrompt, prompt, 500);
 
             if (!string.IsNullOrEmpty(text))
             {
@@ -214,17 +190,8 @@ public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messa
 
         try
         {
-            var systemPrompt = BuildSystemPrompt(RankChangeSystemPrompt);
-            var parameters = new MessageParameters
-            {
-                Model = "claude-sonnet-4-6",
-                MaxTokens = 300,
-                System = [new SystemMessage(systemPrompt)],
-                Messages = [new Message(RoleType.User, prompt)]
-            };
-
-            var response = await client.Messages.GetClaudeMessageAsync(parameters);
-            var text = response.Content.FirstOrDefault()?.ToString()?.Trim();
+            var systemPrompt = BuildSystemPrompt($"{BaseRules}\n{RankChangeRules}");
+            var text = await CallClaudeAsync(systemPrompt, prompt, 300);
 
             if (!string.IsNullOrEmpty(text))
             {
@@ -240,6 +207,20 @@ public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messa
 
         var emoji = isPromotion ? "📈" : "📉";
         return $"{emoji} **{playerName}** went from **{oldRank}** to **{newRank}**. {(isPromotion ? "Let's go!" : "Yikes.")}";
+    }
+
+    private async Task<string?> CallClaudeAsync(string systemPrompt, string userPrompt, int maxTokens)
+    {
+        var parameters = new MessageParameters
+        {
+            Model = "claude-sonnet-4-6",
+            MaxTokens = maxTokens,
+            System = [new SystemMessage(systemPrompt)],
+            Messages = [new Message(RoleType.User, userPrompt)]
+        };
+
+        var response = await client.Messages.GetClaudeMessageAsync(parameters);
+        return response.Content.FirstOrDefault()?.ToString()?.Trim();
     }
 
     private string BuildSystemPrompt(string basePrompt)
