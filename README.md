@@ -21,6 +21,8 @@ Players can also trigger a check on-demand using the `/latest-match <name> <tag>
 - **Duplicate prevention** - tracks the last seen match ID per player in `data/last_matches.json` to avoid re-posting
 - **Performance ratings** - point-based system across KDA, ACS, and HS% producing five tiers: Terrible, Bad, Average, Good, Excellent
 - **AI-powered roasts** - Claude Sonnet generates personalized messages using player stats, history trends, and agent/map context; falls back to static templates if the API is unavailable
+- **Player profiles** - persistent per-player bios and traits (manual and auto-derived) that give the AI personal context for more targeted roasts
+- **Auto-derived traits** - automatically detects patterns like one-tricking, bottom-fragging, map curses, hardstuck ranks, and streak tilting from match history
 - **Rank change detection** - detects promotions and demotions between matches, generates dedicated AI messages for tier changes (e.g. Silver to Gold)
 - **Restart cooldown** - persists last poll timestamp to disk, so the bot waits out the remaining interval on restart instead of polling immediately
 - **Retry logic** - HenrikDev API calls retry up to 3 times with 2-second backoff on failure
@@ -35,6 +37,10 @@ Players can also trigger a check on-demand using the `/latest-match <name> <tag>
 | `/untrack <name> <tag>`      | Remove a player from the tracked list (admin only).                                                                                               |
 | `/status`                    | Bot dashboard showing uptime, polling interval, last/next poll times, and per-player stats (last match, history summary, agents played, streaks). |
 | `/ranks`                     | Ranked leaderboard for all tracked players, sorted by tier and RR. Shows promotion/demotion indicators.                                           |
+| `/set-bio <name> <tag> <bio>` | Set a free-text roast bio for a player (admin only). Used by the AI to personalize messages.                                                     |
+| `/add-trait <name> <tag> <trait>` | Add a manual roast trait to a player (admin only). e.g. "always blames teammates".                                                           |
+| `/profile <name> <tag>`     | View a player's roast profile (bio, manual traits, auto traits). Access can be toggled by admins.                                                  |
+| `/toggle-profile`           | Toggle whether non-admins can use `/profile` (admin only). Defaults to enabled.                                                                    |
 
 ## Prerequisites
 
@@ -60,7 +66,7 @@ cp ValorantBot/appsettings.example.json ValorantBot/appsettings.json
 | `HenrikDevValorantApi.ApiKey` | HenrikDev API key                                     |
 | `Anthropic.ApiKey`            | Anthropic API key                                     |
 | `Polling.IntervalSeconds`     | Polling interval in seconds (default: 1200)           |
-| `BotAdmin.AllowedUserIds`    | Array of Discord user IDs allowed to use `/track` and `/untrack` commands |
+| `BotAdmin.AllowedUserIds`    | Array of Discord user IDs allowed to use admin commands (`/track`, `/untrack`, `/set-bio`, `/add-trait`, `/toggle-profile`) |
 
 ## Data Persistence
 
@@ -72,6 +78,7 @@ The bot stores state in the `data/` directory (created automatically):
 | `last_matches.json`   | Last seen match ID per player, used to prevent duplicate messages                  |
 | `match_history.json`  | Last 20 match records per player, used for trend analysis and AI context           |
 | `message_history.json` | Recent AI-generated messages, used to avoid repetitive messages                   |
+| `player_profiles.json` | Per-player roast profiles (bios, manual traits, auto traits, toggle settings)     |
 | `poll_state.json`     | Timestamp of last poll, used to skip polling on restart if interval has not elapsed |
 
 ## Running Locally
