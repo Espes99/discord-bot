@@ -16,7 +16,7 @@ public class PlayerProfileStore : IPlayerProfileStore
     private readonly ILogger<PlayerProfileStore> _logger;
     private readonly object _lock = new();
     private Dictionary<string, PlayerProfile> _profiles = new();
-    private bool _profileCommandPublic = true;
+    private bool _profileCommandPublic = false;
 
     public bool IsProfileCommandPublic
     {
