@@ -508,9 +508,9 @@ public class Worker(
                 {
                     foreach (var msg in batch)
                     {
-                        // Bot messages with embeds that have the "Valorant Bot" footer = ranks messages
+                        // Bot messages with the ranks-specific footer
                         var isRanksMessage = msg.Author.IsBot
-                            && msg.Embeds.Any(e => e.Footer?.Text == "Valorant Bot");
+                            && msg.Embeds.Any(e => e.Footer?.Text == "Valorant Bot • Ranks");
 
                         // Discord "pinned a message" system notifications
                         var isPinNotification = msg.Type == MessageType.ChannelPinnedMessage;
@@ -614,7 +614,7 @@ public class Worker(
                     .WithColor(color);
 
                 if (i == sorted.Count - 1 || i == 9)
-                    embedBuilder.WithFooter("Valorant Bot").WithTimestamp(DateTimeOffset.UtcNow);
+                    embedBuilder.WithFooter("Valorant Bot • Ranks").WithTimestamp(DateTimeOffset.UtcNow);
 
                 embeds.Add(embedBuilder.Build());
             }
