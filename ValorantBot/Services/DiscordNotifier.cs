@@ -41,6 +41,9 @@ public class DiscordNotifier : IDiscordNotifier
     /// <inheritdoc />
     public event Func<SocketSlashCommand, Task>? OnProfileCommand;
 
+    /// <inheritdoc />
+    public event Func<SocketSlashCommand, Task>? OnToggleProfileCommand;
+
     private readonly IMatchHistoryStore _historyStore;
 
     public DiscordNotifier(
@@ -120,6 +123,10 @@ public class DiscordNotifier : IDiscordNotifier
             .AddOption("name", ApplicationCommandOptionType.String, "Player name", isRequired: true)
             .AddOption("tag", ApplicationCommandOptionType.String, "Player tag (e.g. 1234)", isRequired: true);
 
+        var toggleProfileCommand = new SlashCommandBuilder()
+            .WithName("toggle-profile")
+            .WithDescription("Toggle whether non-admins can use /profile (admin only)");
+
         var guild = _client.GetGuild(_settings.GuildId);
         if (guild is null)
         {
@@ -136,7 +143,8 @@ public class DiscordNotifier : IDiscordNotifier
             untrackCommand.Build(),
             setBioCommand.Build(),
             addTraitCommand.Build(),
-            profileCommand.Build()
+            profileCommand.Build(),
+            toggleProfileCommand.Build()
         ]);
 
         _isReady = true;
@@ -200,6 +208,13 @@ public class DiscordNotifier : IDiscordNotifier
             case "profile":
                 if (OnProfileCommand is not null)
                     await OnProfileCommand.Invoke(command);
+                else
+                    await command.RespondAsync("Bot is not fully initialized yet.");
+                break;
+
+            case "toggle-profile":
+                if (OnToggleProfileCommand is not null)
+                    await OnToggleProfileCommand.Invoke(command);
                 else
                     await command.RespondAsync("Bot is not fully initialized yet.");
                 break;

@@ -9,4 +9,6 @@ public interface IPlayerProfileStore
     void AddManualTrait(string playerKey, string trait);
     void RemoveManualTrait(string playerKey, string trait);
     void UpdateAutoTraits(string playerKey, List<string> traits);
+    bool IsProfileCommandPublic { get; }
+    void SetProfileCommandPublic(bool isPublic);
 }

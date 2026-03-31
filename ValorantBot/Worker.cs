@@ -38,6 +38,7 @@ public class Worker(
         discord.OnSetBioCommand += HandleSetBioCommandAsync;
         discord.OnAddTraitCommand += HandleAddTraitCommandAsync;
         discord.OnProfileCommand += HandleProfileCommandAsync;
+        discord.OnToggleProfileCommand += HandleToggleProfileCommandAsync;
         await discord.StartAsync(stoppingToken);
         await discord.WaitUntilReadyAsync(stoppingToken);
 
@@ -631,6 +632,12 @@ public class Worker(
     {
         await command.DeferAsync(ephemeral: true);
 
+        if (!playerProfileStore.IsProfileCommandPublic && !IsAuthorized(command))
+        {
+            await command.FollowupAsync("The /profile command is currently disabled.", ephemeral: true);
+            return;
+        }
+
         var name = command.Data.Options.First(o => o.Name == "name").Value.ToString()!;
         var tag = command.Data.Options.First(o => o.Name == "tag").Value.ToString()!;
 
@@ -659,6 +666,24 @@ public class Worker(
             embed.AddField("Auto Traits", string.Join("\n", profile.AutoTraits.Select(t => $"- {t}")));
 
         await command.FollowupAsync(embed: embed.Build(), ephemeral: true);
+    }
+
+    private async Task HandleToggleProfileCommandAsync(SocketSlashCommand command)
+    {
+        await command.DeferAsync(ephemeral: true);
+
+        if (!IsAuthorized(command))
+        {
+            await command.FollowupAsync("You don't have permission to use this command.", ephemeral: true);
+            return;
+        }
+
+        var newState = !playerProfileStore.IsProfileCommandPublic;
+        playerProfileStore.SetProfileCommandPublic(newState);
+
+        var stateText = newState ? "enabled" : "disabled";
+        logger.LogInformation("{User} toggled /profile command to {State}", command.User.Username, stateText);
+        await command.FollowupAsync($"/profile command is now **{stateText}** for non-admins.", ephemeral: true);
     }
 
     private void UpdateAutoTraits(string playerKey)

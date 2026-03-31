@@ -16,6 +16,12 @@ public class PlayerProfileStore : IPlayerProfileStore
     private readonly ILogger<PlayerProfileStore> _logger;
     private readonly object _lock = new();
     private Dictionary<string, PlayerProfile> _profiles = new();
+    private bool _profileCommandPublic = true;
+
+    public bool IsProfileCommandPublic
+    {
+        get { lock (_lock) { return _profileCommandPublic; } }
+    }
 
     public PlayerProfileStore(ILogger<PlayerProfileStore> logger)
     {
@@ -86,6 +92,15 @@ public class PlayerProfileStore : IPlayerProfileStore
         }
     }
 
+    public void SetProfileCommandPublic(bool isPublic)
+    {
+        lock (_lock)
+        {
+            _profileCommandPublic = isPublic;
+            Save();
+        }
+    }
+
     private PlayerProfile GetOrCreateProfile(string playerKey)
     {
         var key = playerKey.ToLowerInvariant();
@@ -108,8 +123,21 @@ public class PlayerProfileStore : IPlayerProfileStore
         try
         {
             var json = File.ReadAllText(_filePath);
+
+            // Try new wrapper format first
+            var data = JsonSerializer.Deserialize<ProfileData>(json, JsonOptions);
+            if (data?.Profiles is not null)
+            {
+                _profiles = data.Profiles;
+                _profileCommandPublic = data.ProfileCommandPublic;
+                _logger.LogInformation("Loaded profiles for {Count} player(s)", _profiles.Count);
+                return;
+            }
+
+            // Fall back to old format (raw dictionary)
             _profiles = JsonSerializer.Deserialize<Dictionary<string, PlayerProfile>>(json, JsonOptions) ?? new();
-            _logger.LogInformation("Loaded profiles for {Count} player(s)", _profiles.Count);
+            _logger.LogInformation("Migrated profiles for {Count} player(s) from old format", _profiles.Count);
+            Save(); // Re-save in new format
         }
         catch (Exception ex)
         {
@@ -122,12 +150,23 @@ public class PlayerProfileStore : IPlayerProfileStore
     {
         try
         {
-            var json = JsonSerializer.Serialize(_profiles, JsonOptions);
+            var data = new ProfileData
+            {
+                Profiles = _profiles,
+                ProfileCommandPublic = _profileCommandPublic
+            };
+            var json = JsonSerializer.Serialize(data, JsonOptions);
             File.WriteAllText(_filePath, json);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to persist player profiles");
         }
+    }
+
+    private class ProfileData
+    {
+        public Dictionary<string, PlayerProfile> Profiles { get; set; } = new();
+        public bool ProfileCommandPublic { get; set; } = true;
     }
 }
