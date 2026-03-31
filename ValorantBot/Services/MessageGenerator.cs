@@ -11,6 +11,9 @@ public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messa
 {
     private static readonly Random Rng = new();
 
+    private static string StoreKey(TrackedPlayer player) =>
+        !string.IsNullOrEmpty(player.Puuid) ? player.Puuid : MatchTracker.PlayerKey(player.Name, player.Tag);
+
     private static readonly string[] StyleModifiers =
     [
         "Voice: disappointed coach giving a post-game press conference",
@@ -86,8 +89,8 @@ public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messa
     {
         var stats = result.MatchPlayer.Stats;
         var historyBlock = history is not null ? $"\n{HistorySummarizer.FormatForPrompt(history)}\n" : "";
-        var playerKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
-        var profileBlock = FormatProfileForPrompt(profileStore.GetProfile(playerKey));
+        var storeKey = StoreKey(result.Player);
+        var profileBlock = FormatProfileForPrompt(profileStore.GetProfile(storeKey));
         var rankBlock = rankChange is not null
             ? $"\nRANK CHANGE: {(rankChange.IsPromotion ? "PROMOTED" : "DEMOTED")} from {rankChange.OldRank} to {rankChange.NewRank} ({(rankChange.IsMajor ? "MAJOR tier change" : "minor change")})\n"
             : "";
@@ -133,18 +136,18 @@ public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messa
         var playerStats = string.Join("\n", results.Select(r =>
         {
             var s = r.MatchPlayer.Stats;
-            var key = $"{r.MatchPlayer.Name}#{r.MatchPlayer.Tag}";
-            var historyLine = histories is not null && histories.TryGetValue(key, out var h)
+            var displayKey = $"{r.MatchPlayer.Name}#{r.MatchPlayer.Tag}";
+            var storeK = StoreKey(r.Player);
+            var historyLine = histories is not null && histories.TryGetValue(storeK, out var h)
                 ? $"\n    History: WR {h.WinRate:F0}%, Avg ACS {h.AverageAcs:F0}, Avg KDA {h.AverageKda:F2}, {(h.CurrentLossStreak > 1 ? $"{h.CurrentLossStreak} loss streak" : h.CurrentWinStreak > 1 ? $"{h.CurrentWinStreak} win streak" : "no streak")}"
                 : "";
-            var playerKey = MatchTracker.PlayerKey(r.Player.Name, r.Player.Tag);
-            var rankLine = rankChanges is not null && rankChanges.TryGetValue(playerKey, out var rc)
+            var rankLine = rankChanges is not null && rankChanges.TryGetValue(storeK, out var rc)
                 ? $"\n    RANK CHANGE: {(rc.IsPromotion ? "PROMOTED" : "DEMOTED")} from {rc.OldRank} to {rc.NewRank} ({(rc.IsMajor ? "MAJOR tier change" : "minor change")})"
                 : "";
             var weaponLine = FormatWeaponContext(r.WeaponContext);
-            var profileLine = FormatProfileLineForSquad(profileStore.GetProfile(playerKey));
+            var profileLine = FormatProfileLineForSquad(profileStore.GetProfile(storeK));
             return $"""
-                - {key} | Agent: {r.MatchPlayer.Agent.Name} | K/D/A: {s.Kills}/{s.Deaths}/{s.Assists} | ACS: {r.Acs:F0} | KDA: {s.Kda:F2} | HS%: {s.HeadshotPercentage:F1}%{weaponLine} | Rating: {r.Rating}{historyLine}{rankLine}{profileLine}
+                - {displayKey} | Agent: {r.MatchPlayer.Agent.Name} | K/D/A: {s.Kills}/{s.Deaths}/{s.Assists} | ACS: {r.Acs:F0} | KDA: {s.Kda:F2} | HS%: {s.HeadshotPercentage:F1}%{weaponLine} | Rating: {r.Rating}{historyLine}{rankLine}{profileLine}
                 """;
         }));
 

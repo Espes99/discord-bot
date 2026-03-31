@@ -19,4 +19,10 @@ public interface IMatchTracker
     /// Returns the last-seen match ID for the given player, or null if none tracked.
     /// </summary>
     string? GetLastMatchId(string playerKey);
+
+    /// <summary>
+    /// Migrates data stored under an old key to a new key.
+    /// Returns true if a migration was performed.
+    /// </summary>
+    bool MigrateKey(string oldKey, string newKey);
 }

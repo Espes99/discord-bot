@@ -46,6 +46,9 @@ public class DiscordNotifier : IDiscordNotifier
 
     private readonly IMatchHistoryStore _historyStore;
 
+    private static string StoreKey(TrackedPlayer player) =>
+        !string.IsNullOrEmpty(player.Puuid) ? player.Puuid : MatchTracker.PlayerKey(player.Name, player.Tag);
+
     public DiscordNotifier(
         IOptions<DiscordSettings> settings,
         IMessageGenerator messageGenerator,
@@ -259,8 +262,8 @@ public class DiscordNotifier : IDiscordNotifier
             return false;
         }
 
-        var playerKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
-        var history = HistorySummarizer.Summarize(_historyStore.GetHistory(playerKey));
+        var storeKey = StoreKey(result.Player);
+        var history = HistorySummarizer.Summarize(_historyStore.GetHistory(storeKey));
         var message = await _messageGenerator.GenerateMessageAsync(result, history, rankChange);
         var embed = BuildEmbed(result, rankChange);
 
@@ -287,7 +290,7 @@ public class DiscordNotifier : IDiscordNotifier
         }
 
         var histories = results
-            .Select(r => (Key: MatchTracker.PlayerKey(r.Player.Name, r.Player.Tag), Result: r))
+            .Select(r => (Key: StoreKey(r.Player), Result: r))
             .Select(x => (x.Key, Summary: HistorySummarizer.Summarize(_historyStore.GetHistory(x.Key))))
             .Where(x => x.Summary is not null)
             .ToDictionary(x => x.Key, x => x.Summary!);
@@ -295,8 +298,8 @@ public class DiscordNotifier : IDiscordNotifier
         var message = await _messageGenerator.GenerateSquadMessageAsync(results, histories.Count > 0 ? histories : null, rankChanges);
         var embeds = results.Select(r =>
         {
-            var playerKey = MatchTracker.PlayerKey(r.Player.Name, r.Player.Tag);
-            var rc = rankChanges is not null && rankChanges.TryGetValue(playerKey, out var change) ? change : null;
+            var key = StoreKey(r.Player);
+            var rc = rankChanges is not null && rankChanges.TryGetValue(key, out var change) ? change : null;
             return BuildEmbed(r, rc);
         }).ToArray();
         await channel.SendMessageAsync(text: message, embeds: embeds);

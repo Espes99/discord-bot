@@ -90,6 +90,57 @@ public class HenrikDevClient(HttpClient httpClient, ILogger<HenrikDevClient> log
         return result?.Data;
     }
 
+    /// <inheritdoc />
+    public async Task<AccountData?> GetAccountAsync(
+        string name, string tag, CancellationToken ct = default)
+    {
+        var url = $"v1/account/{Uri.EscapeDataString(name)}/{Uri.EscapeDataString(tag)}";
+        logger.LogDebug("Fetching account: {Url}", url);
+
+        var response = await SendWithRetryAsync(url, ct);
+        if (response is null)
+            return null;
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            logger.LogWarning("Account {Name}#{Tag} not found", name, tag);
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+
+        var body = await response.Content.ReadAsStringAsync(ct);
+        var result = JsonSerializer.Deserialize<AccountResponse>(body);
+        return result?.Data;
+    }
+
+    /// <inheritdoc />
+    public async Task<List<MatchListEntry>> GetRecentMatchesByPuuidAsync(
+        string puuid, string region, CancellationToken ct = default)
+    {
+        var url = $"v4/by-puuid/matches/{region}/pc/{Uri.EscapeDataString(puuid)}?size=5&mode=competitive";
+        logger.LogDebug("Fetching match list by puuid: {Url}", url);
+
+        var response = await SendWithRetryAsync(url, ct);
+        if (response is null)
+            return [];
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            logger.LogWarning("No matches found for puuid {Puuid}", puuid);
+            return [];
+        }
+
+        response.EnsureSuccessStatusCode();
+
+        var body = await response.Content.ReadAsStringAsync(ct);
+        var result = JsonSerializer.Deserialize<MatchListResponse>(body);
+        logger.LogDebug("Deserialized {Count} match(es) for puuid {Puuid}",
+            result?.Data?.Count ?? 0, puuid);
+
+        return result?.Data ?? [];
+    }
+
     private async Task<HttpResponseMessage?> SendWithRetryAsync(string url, CancellationToken ct)
     {
         for (var attempt = 1; attempt <= MaxRetries; attempt++)

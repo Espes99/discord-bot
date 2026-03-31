@@ -84,6 +84,38 @@ public class MatchHistoryStore : IMatchHistoryStore
         }
     }
 
+    public bool MigrateKey(string oldKey, string newKey)
+    {
+        lock (_lock)
+        {
+            if (!_history.TryGetValue(oldKey, out var entries))
+                return false;
+
+            if (oldKey == newKey)
+                return false;
+
+            // Merge if new key already has entries
+            if (_history.TryGetValue(newKey, out var existing))
+            {
+                var merged = existing
+                    .Concat(entries)
+                    .DistinctBy(e => e.MatchId)
+                    .OrderByDescending(e => e.PlayedAt)
+                    .Take(MaxEntriesPerPlayer)
+                    .ToList();
+                _history[newKey] = merged;
+            }
+            else
+            {
+                _history[newKey] = entries;
+            }
+
+            _history.Remove(oldKey);
+            Save();
+            return true;
+        }
+    }
+
     private void Load()
     {
         if (!File.Exists(_filePath))

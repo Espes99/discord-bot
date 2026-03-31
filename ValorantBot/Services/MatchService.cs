@@ -13,12 +13,16 @@ public class MatchService(
     /// <inheritdoc />
     public async Task<PerformanceResult?> GetLatestPerformanceAsync(TrackedPlayer player, CancellationToken ct = default)
     {
-        var playerKey = MatchTracker.PlayerKey(player.Name, player.Tag);
+        var displayKey = MatchTracker.PlayerKey(player.Name, player.Tag);
 
-        var matches = await henrikDev.GetRecentMatchesAsync(player.Name, player.Tag, player.Region, ct);
+        // Prefer puuid-based match list if available (survives name changes)
+        var matches = !string.IsNullOrEmpty(player.Puuid)
+            ? await henrikDev.GetRecentMatchesByPuuidAsync(player.Puuid, player.Region, ct)
+            : await henrikDev.GetRecentMatchesAsync(player.Name, player.Tag, player.Region, ct);
+
         if (matches.Count == 0)
         {
-            logger.LogDebug("No matches found for {Key}", playerKey);
+            logger.LogDebug("No matches found for {Key}", displayKey);
             return null;
         }
 
@@ -32,7 +36,7 @@ public class MatchService(
             return null;
 
         var matchId = latest.Metadata.MatchId;
-        logger.LogInformation("Latest match for {Key}: {MatchId}", playerKey, matchId);
+        logger.LogInformation("Latest match for {Key}: {MatchId}", displayKey, matchId);
 
         // Pace requests to avoid HenrikDev API rate limits
         await Task.Delay(TimeSpan.FromSeconds(2), ct);
@@ -44,21 +48,29 @@ public class MatchService(
             return null;
         }
 
-        var matchPlayer = details.Players
+        // Match player by puuid first (stable), fall back to name+tag
+        MatchPlayer? matchPlayer = null;
+        if (!string.IsNullOrEmpty(player.Puuid))
+        {
+            matchPlayer = details.Players
+                .FirstOrDefault(p => string.Equals(p.Puuid, player.Puuid, StringComparison.OrdinalIgnoreCase));
+        }
+
+        matchPlayer ??= details.Players
             .FirstOrDefault(p =>
                 p.Name.Equals(player.Name, StringComparison.OrdinalIgnoreCase) &&
                 p.Tag.Equals(player.Tag, StringComparison.OrdinalIgnoreCase));
 
         if (matchPlayer is null)
         {
-            logger.LogWarning("Player {Key} not found in match details", playerKey);
+            logger.LogWarning("Player {Key} not found in match details", displayKey);
             return null;
         }
 
         var result = performanceAnalyzer.Analyze(player, matchPlayer, details);
 
-        logger.LogInformation("{Key} performance: {Rating} — K/D/A: {K}/{D}/{A}, ACS: {Acs:F0}",
-            playerKey, result.Rating,
+        logger.LogInformation("{Key} performance: {Rating} -- K/D/A: {K}/{D}/{A}, ACS: {Acs:F0}",
+            displayKey, result.Rating,
             matchPlayer.Stats.Kills, matchPlayer.Stats.Deaths, matchPlayer.Stats.Assists,
             result.Acs);
 
