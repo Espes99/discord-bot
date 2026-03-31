@@ -124,17 +124,19 @@ public class PlayerProfileStore : IPlayerProfileStore
         {
             var json = File.ReadAllText(_filePath);
 
-            // Try new wrapper format first
-            var data = JsonSerializer.Deserialize<ProfileData>(json, JsonOptions);
-            if (data?.Profiles is not null)
+            // Detect format by checking if the JSON has a "Profiles" key
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("Profiles", out _))
             {
+                // New wrapper format
+                var data = JsonSerializer.Deserialize<ProfileData>(json, JsonOptions)!;
                 _profiles = data.Profiles;
                 _profileCommandPublic = data.ProfileCommandPublic;
                 _logger.LogInformation("Loaded profiles for {Count} player(s)", _profiles.Count);
                 return;
             }
 
-            // Fall back to old format (raw dictionary)
+            // Old format (raw dictionary)
             _profiles = JsonSerializer.Deserialize<Dictionary<string, PlayerProfile>>(json, JsonOptions) ?? new();
             _logger.LogInformation("Migrated profiles for {Count} player(s) from old format", _profiles.Count);
             Save(); // Re-save in new format

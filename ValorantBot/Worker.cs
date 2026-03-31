@@ -642,11 +642,22 @@ public class Worker(
         var tag = command.Data.Options.First(o => o.Name == "tag").Value.ToString()!;
 
         var playerKey = MatchTracker.PlayerKey(name, tag);
+
+        // Generate auto traits on-demand if the player has history but no profile yet
         var profile = playerProfileStore.GetProfile(playerKey);
+        if (profile is null)
+        {
+            var history = matchHistoryStore.GetHistory(playerKey);
+            if (history.Count > 0)
+            {
+                UpdateAutoTraits(playerKey);
+                profile = playerProfileStore.GetProfile(playerKey);
+            }
+        }
 
         if (profile is null)
         {
-            await command.FollowupAsync($"No profile found for **{name}#{tag}**.", ephemeral: true);
+            await command.FollowupAsync($"No profile found for **{name}#{tag}**. Use `/set-bio` or `/add-trait` to create one, or wait for a match to generate auto traits.", ephemeral: true);
             return;
         }
 
@@ -664,6 +675,9 @@ public class Worker(
 
         if (profile.AutoTraits.Count > 0)
             embed.AddField("Auto Traits", string.Join("\n", profile.AutoTraits.Select(t => $"- {t}")));
+
+        if (string.IsNullOrWhiteSpace(profile.Bio) && profile.ManualTraits.Count == 0 && profile.AutoTraits.Count == 0)
+            embed.WithDescription("Profile exists but has no bio, traits, or auto traits yet.");
 
         await command.FollowupAsync(embed: embed.Build(), ephemeral: true);
     }
