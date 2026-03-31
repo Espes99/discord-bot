@@ -1,4 +1,6 @@
+using System.Net;
 using Discord;
+using Discord.Net;
 using Discord.WebSocket;
 using Microsoft.Extensions.Options;
 using ValorantBot.Models;
@@ -493,6 +495,58 @@ public class Worker(
     {
         await command.DeferAsync();
 
+        // Delete previous /ranks messages from the bot in this channel
+        if (command.Channel is ITextChannel textChannel)
+        {
+            try
+            {
+                var cutoff = DateTimeOffset.UtcNow.AddDays(-14);
+                var ranksMessages = new List<IMessage>();
+
+                var batch = (await textChannel.GetMessagesAsync(100).FlattenAsync()).ToList();
+                while (batch.Count > 0)
+                {
+                    foreach (var msg in batch)
+                    {
+                        // Bot messages with embeds that have the "Valorant Bot" footer = ranks messages
+                        var isRanksMessage = msg.Author.IsBot
+                            && msg.Embeds.Any(e => e.Footer?.Text == "Valorant Bot");
+
+                        // Discord "pinned a message" system notifications
+                        var isPinNotification = msg.Type == MessageType.ChannelPinnedMessage;
+
+                        if (isRanksMessage || isPinNotification)
+                            ranksMessages.Add(msg);
+                    }
+
+                    var oldest = batch.MinBy(m => m.CreatedAt)!;
+                    batch = (await textChannel.GetMessagesAsync(oldest.Id, Direction.Before, 100).FlattenAsync()).ToList();
+                }
+
+                var recentMessages = ranksMessages.Where(m => m.CreatedAt > cutoff).ToList();
+                var oldMessages = ranksMessages.Where(m => m.CreatedAt <= cutoff).ToList();
+
+                if (recentMessages.Count >= 2)
+                    await textChannel.DeleteMessagesAsync(recentMessages);
+                else if (recentMessages.Count == 1)
+                    await recentMessages[0].DeleteAsync();
+
+                foreach (var msg in oldMessages)
+                {
+                    await msg.DeleteAsync();
+                    await Task.Delay(500);
+                }
+            }
+            catch (HttpException ex) when (ex.HttpCode == HttpStatusCode.Forbidden)
+            {
+                logger.LogWarning("Bot lacks ManageMessages permission — skipping channel cleanup");
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to delete previous ranks messages in channel");
+            }
+        }
+
         try
         {
             var players = trackedPlayerStore.GetAll();
@@ -565,7 +619,16 @@ public class Worker(
                 embeds.Add(embedBuilder.Build());
             }
 
-            await command.FollowupAsync(embeds: embeds.ToArray());
+            var ranksMessage = await command.FollowupAsync(embeds: embeds.ToArray());
+
+            try
+            {
+                await ranksMessage.PinAsync();
+            }
+            catch (HttpException ex) when (ex.HttpCode == HttpStatusCode.Forbidden)
+            {
+                logger.LogWarning("Bot lacks ManageMessages permission — could not pin ranks message");
+            }
         }
         catch (Exception ex)
         {
