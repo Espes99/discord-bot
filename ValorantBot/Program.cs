@@ -46,6 +46,7 @@ builder.Services.AddSingleton(new AnthropicClient(anthropicApiKey));
 // Services
 builder.Services.AddSingleton<IMatchTracker, MatchTracker>();
 builder.Services.AddSingleton<IMatchHistoryStore, MatchHistoryStore>();
+builder.Services.AddSingleton<IPlayerProfileStore, PlayerProfileStore>();
 builder.Services.AddSingleton<ITrackedPlayerStore, TrackedPlayerStore>();
 builder.Services.AddSingleton<IPollStateStore, PollStateStore>();
 builder.Services.AddSingleton<IMessageHistoryStore, MessageHistoryStore>();

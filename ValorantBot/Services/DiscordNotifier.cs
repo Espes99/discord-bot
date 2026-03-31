@@ -32,6 +32,15 @@ public class DiscordNotifier : IDiscordNotifier
     /// <inheritdoc />
     public event Func<SocketSlashCommand, Task>? OnUntrackCommand;
 
+    /// <inheritdoc />
+    public event Func<SocketSlashCommand, Task>? OnSetBioCommand;
+
+    /// <inheritdoc />
+    public event Func<SocketSlashCommand, Task>? OnAddTraitCommand;
+
+    /// <inheritdoc />
+    public event Func<SocketSlashCommand, Task>? OnProfileCommand;
+
     private readonly IMatchHistoryStore _historyStore;
 
     public DiscordNotifier(
@@ -91,6 +100,26 @@ public class DiscordNotifier : IDiscordNotifier
             .AddOption("name", ApplicationCommandOptionType.String, "Player name", isRequired: true)
             .AddOption("tag", ApplicationCommandOptionType.String, "Player tag (e.g. 1234)", isRequired: true);
 
+        var setBioCommand = new SlashCommandBuilder()
+            .WithName("set-bio")
+            .WithDescription("Set a player's roast bio (admin only)")
+            .AddOption("name", ApplicationCommandOptionType.String, "Player name", isRequired: true)
+            .AddOption("tag", ApplicationCommandOptionType.String, "Player tag (e.g. 1234)", isRequired: true)
+            .AddOption("bio", ApplicationCommandOptionType.String, "Free-text bio for roast personalization", isRequired: true);
+
+        var addTraitCommand = new SlashCommandBuilder()
+            .WithName("add-trait")
+            .WithDescription("Add a roast trait to a player (admin only)")
+            .AddOption("name", ApplicationCommandOptionType.String, "Player name", isRequired: true)
+            .AddOption("tag", ApplicationCommandOptionType.String, "Player tag (e.g. 1234)", isRequired: true)
+            .AddOption("trait", ApplicationCommandOptionType.String, "Trait to add (e.g. \"always blames teammates\")", isRequired: true);
+
+        var profileCommand = new SlashCommandBuilder()
+            .WithName("profile")
+            .WithDescription("View a player's roast profile")
+            .AddOption("name", ApplicationCommandOptionType.String, "Player name", isRequired: true)
+            .AddOption("tag", ApplicationCommandOptionType.String, "Player tag (e.g. 1234)", isRequired: true);
+
         var guild = _client.GetGuild(_settings.GuildId);
         if (guild is null)
         {
@@ -104,7 +133,10 @@ public class DiscordNotifier : IDiscordNotifier
             statusCommand.Build(),
             ranksCommand.Build(),
             trackCommand.Build(),
-            untrackCommand.Build()
+            untrackCommand.Build(),
+            setBioCommand.Build(),
+            addTraitCommand.Build(),
+            profileCommand.Build()
         ]);
 
         _isReady = true;
@@ -147,6 +179,27 @@ public class DiscordNotifier : IDiscordNotifier
             case "untrack":
                 if (OnUntrackCommand is not null)
                     await OnUntrackCommand.Invoke(command);
+                else
+                    await command.RespondAsync("Bot is not fully initialized yet.");
+                break;
+
+            case "set-bio":
+                if (OnSetBioCommand is not null)
+                    await OnSetBioCommand.Invoke(command);
+                else
+                    await command.RespondAsync("Bot is not fully initialized yet.");
+                break;
+
+            case "add-trait":
+                if (OnAddTraitCommand is not null)
+                    await OnAddTraitCommand.Invoke(command);
+                else
+                    await command.RespondAsync("Bot is not fully initialized yet.");
+                break;
+
+            case "profile":
+                if (OnProfileCommand is not null)
+                    await OnProfileCommand.Invoke(command);
                 else
                     await command.RespondAsync("Bot is not fully initialized yet.");
                 break;

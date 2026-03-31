@@ -34,6 +34,21 @@ public interface IDiscordNotifier : IAsyncDisposable
     event Func<SocketSlashCommand, Task>? OnUntrackCommand;
 
     /// <summary>
+    /// Raised when a user invokes the /set-bio slash command.
+    /// </summary>
+    event Func<SocketSlashCommand, Task>? OnSetBioCommand;
+
+    /// <summary>
+    /// Raised when a user invokes the /add-trait slash command.
+    /// </summary>
+    event Func<SocketSlashCommand, Task>? OnAddTraitCommand;
+
+    /// <summary>
+    /// Raised when a user invokes the /profile slash command.
+    /// </summary>
+    event Func<SocketSlashCommand, Task>? OnProfileCommand;
+
+    /// <summary>
     /// Connects the bot to Discord and registers slash commands.
     /// </summary>
     Task StartAsync(CancellationToken ct);

@@ -14,6 +14,7 @@ public class Worker(
     IDiscordNotifier discord,
     IMatchTracker matchTracker,
     IMatchHistoryStore matchHistoryStore,
+    IPlayerProfileStore playerProfileStore,
     IPollStateStore pollStateStore,
     IServiceScopeFactory scopeFactory,
     IOptions<PollingSettings> pollingOptions,
@@ -34,8 +35,13 @@ public class Worker(
         discord.OnRanksCommand += HandleRanksCommandAsync;
         discord.OnTrackCommand += HandleTrackCommandAsync;
         discord.OnUntrackCommand += HandleUntrackCommandAsync;
+        discord.OnSetBioCommand += HandleSetBioCommandAsync;
+        discord.OnAddTraitCommand += HandleAddTraitCommandAsync;
+        discord.OnProfileCommand += HandleProfileCommandAsync;
         await discord.StartAsync(stoppingToken);
         await discord.WaitUntilReadyAsync(stoppingToken);
+
+        SeedAutoTraits();
 
         var interval = TimeSpan.FromSeconds(pollingOptions.Value.IntervalSeconds);
         logger.LogInformation("Polling {Count} tracked player(s) every {Interval}s",
@@ -131,6 +137,7 @@ public class Worker(
             {
                 matchTracker.SetLastMatch(playerKey, result.MatchData.Metadata.MatchId);
                 matchHistoryStore.AddMatch(playerKey, MatchHistoryEntry.FromPerformanceResult(result));
+                UpdateAutoTraits(playerKey);
             }
         }
 
@@ -161,6 +168,7 @@ public class Worker(
                     var playerKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
                     matchTracker.SetLastMatch(playerKey, result.MatchData.Metadata.MatchId);
                     matchHistoryStore.AddMatch(playerKey, MatchHistoryEntry.FromPerformanceResult(result));
+                    UpdateAutoTraits(playerKey);
                 }
             }
         }
@@ -575,6 +583,116 @@ public class Worker(
         if (uptime.TotalDays < 1)
             return $"{(int)uptime.TotalHours}h {uptime.Minutes}m";
         return $"{(int)uptime.TotalDays}d {uptime.Hours}h {uptime.Minutes}m";
+    }
+
+    private async Task HandleSetBioCommandAsync(SocketSlashCommand command)
+    {
+        await command.DeferAsync(ephemeral: true);
+
+        if (!IsAuthorized(command))
+        {
+            await command.FollowupAsync("You don't have permission to use this command.", ephemeral: true);
+            return;
+        }
+
+        var name = command.Data.Options.First(o => o.Name == "name").Value.ToString()!;
+        var tag = command.Data.Options.First(o => o.Name == "tag").Value.ToString()!;
+        var bio = command.Data.Options.First(o => o.Name == "bio").Value.ToString()!;
+
+        var playerKey = MatchTracker.PlayerKey(name, tag);
+        playerProfileStore.SetBio(playerKey, bio);
+
+        logger.LogInformation("{User} set bio for {Name}#{Tag}: {Bio}",
+            command.User.Username, name, tag, bio);
+        await command.FollowupAsync($"Bio set for **{name}#{tag}**: \"{bio}\"", ephemeral: true);
+    }
+
+    private async Task HandleAddTraitCommandAsync(SocketSlashCommand command)
+    {
+        await command.DeferAsync(ephemeral: true);
+
+        if (!IsAuthorized(command))
+        {
+            await command.FollowupAsync("You don't have permission to use this command.", ephemeral: true);
+            return;
+        }
+
+        var name = command.Data.Options.First(o => o.Name == "name").Value.ToString()!;
+        var tag = command.Data.Options.First(o => o.Name == "tag").Value.ToString()!;
+        var trait = command.Data.Options.First(o => o.Name == "trait").Value.ToString()!;
+
+        var playerKey = MatchTracker.PlayerKey(name, tag);
+        playerProfileStore.AddManualTrait(playerKey, trait);
+
+        logger.LogInformation("{User} added trait for {Name}#{Tag}: {Trait}",
+            command.User.Username, name, tag, trait);
+        await command.FollowupAsync($"Trait added for **{name}#{tag}**: \"{trait}\"", ephemeral: true);
+    }
+
+    private async Task HandleProfileCommandAsync(SocketSlashCommand command)
+    {
+        await command.DeferAsync(ephemeral: true);
+
+        var name = command.Data.Options.First(o => o.Name == "name").Value.ToString()!;
+        var tag = command.Data.Options.First(o => o.Name == "tag").Value.ToString()!;
+
+        var playerKey = MatchTracker.PlayerKey(name, tag);
+        var profile = playerProfileStore.GetProfile(playerKey);
+
+        if (profile is null)
+        {
+            await command.FollowupAsync($"No profile found for **{name}#{tag}**.", ephemeral: true);
+            return;
+        }
+
+        var embed = new EmbedBuilder()
+            .WithTitle($"Profile: {name}#{tag}")
+            .WithColor(Color.Purple)
+            .WithTimestamp(DateTimeOffset.UtcNow)
+            .WithFooter("Valorant Bot");
+
+        if (!string.IsNullOrWhiteSpace(profile.Bio))
+            embed.AddField("Bio", profile.Bio);
+
+        if (profile.ManualTraits.Count > 0)
+            embed.AddField("Manual Traits", string.Join("\n", profile.ManualTraits.Select(t => $"- {t}")));
+
+        if (profile.AutoTraits.Count > 0)
+            embed.AddField("Auto Traits", string.Join("\n", profile.AutoTraits.Select(t => $"- {t}")));
+
+        await command.FollowupAsync(embed: embed.Build(), ephemeral: true);
+    }
+
+    private void SeedAutoTraits()
+    {
+        var players = trackedPlayerStore.GetAll();
+        var seeded = 0;
+
+        foreach (var player in players)
+        {
+            var playerKey = MatchTracker.PlayerKey(player.Name, player.Tag);
+            var profile = playerProfileStore.GetProfile(playerKey);
+            if (profile is { AutoTraits.Count: > 0 })
+                continue;
+
+            var history = matchHistoryStore.GetHistory(playerKey);
+            if (history.Count == 0)
+                continue;
+
+            UpdateAutoTraits(playerKey);
+            seeded++;
+        }
+
+        if (seeded > 0)
+            logger.LogInformation("Seeded auto traits for {Count} player(s)", seeded);
+    }
+
+    private void UpdateAutoTraits(string playerKey)
+    {
+        var history = matchHistoryStore.GetHistory(playerKey);
+        var summary = HistorySummarizer.Summarize(history);
+        var autoTraits = ProfileTraitDeriver.DeriveTraits(history, summary);
+        playerProfileStore.UpdateAutoTraits(playerKey, autoTraits);
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)

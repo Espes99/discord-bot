@@ -7,7 +7,7 @@ namespace ValorantBot.Services;
 /// <summary>
 /// Generates AI-powered Discord messages using Claude, with static fallbacks.
 /// </summary>
-public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messageHistory, ILogger<MessageGenerator> logger) : IMessageGenerator
+public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messageHistory, IPlayerProfileStore profileStore, ILogger<MessageGenerator> logger) : IMessageGenerator
 {
     private static readonly Random Rng = new();
 
@@ -38,6 +38,7 @@ public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messa
           - For MAJOR tier changes (e.g. Silver to Gold, Plat to Diamond): make it dramatic and over the top
           - For minor rank changes (within same tier): a quick mention is enough
         - If player history is provided, reference trends to make roasts more personal (streaks, declining stats, map weaknesses, etc.)
+        - If a PLAYER PROFILE is provided, use it to personalize your roast. Reference their known personality, habits, and tendencies. This is what makes your roasts recognizable and personal to the player.
         - If weapon context is provided, factor it into your HS% commentary. Don't mock low HS% if the player mainly used shotguns, snipers, or LMGs. Mock them for weapon choice instead if anything.
         - Never be mean-spirited about real personal things, keep it about the game
         - Do NOT use any prefix or label. Just output the message directly.
@@ -85,6 +86,8 @@ public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messa
     {
         var stats = result.MatchPlayer.Stats;
         var historyBlock = history is not null ? $"\n{HistorySummarizer.FormatForPrompt(history)}\n" : "";
+        var playerKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
+        var profileBlock = FormatProfileForPrompt(profileStore.GetProfile(playerKey));
         var rankBlock = rankChange is not null
             ? $"\nRANK CHANGE: {(rankChange.IsPromotion ? "PROMOTED" : "DEMOTED")} from {rankChange.OldRank} to {rankChange.NewRank} ({(rankChange.IsMajor ? "MAJOR tier change" : "minor change")})\n"
             : "";
@@ -99,7 +102,7 @@ public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messa
             KDA Ratio: {stats.Kda:F2}
             Headshot %: {stats.HeadshotPercentage:F1}%{weaponBlock}
             Performance Rating: {result.Rating}
-            {historyBlock}{rankBlock}
+            {historyBlock}{profileBlock}{rankBlock}
             Generate a single Discord message for this player's performance.
             """;
 
@@ -139,8 +142,9 @@ public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messa
                 ? $"\n    RANK CHANGE: {(rc.IsPromotion ? "PROMOTED" : "DEMOTED")} from {rc.OldRank} to {rc.NewRank} ({(rc.IsMajor ? "MAJOR tier change" : "minor change")})"
                 : "";
             var weaponLine = FormatWeaponContext(r.WeaponContext);
+            var profileLine = FormatProfileLineForSquad(profileStore.GetProfile(playerKey));
             return $"""
-                - {key} | Agent: {r.MatchPlayer.Agent.Name} | K/D/A: {s.Kills}/{s.Deaths}/{s.Assists} | ACS: {r.Acs:F0} | KDA: {s.Kda:F2} | HS%: {s.HeadshotPercentage:F1}%{weaponLine} | Rating: {r.Rating}{historyLine}{rankLine}
+                - {key} | Agent: {r.MatchPlayer.Agent.Name} | K/D/A: {s.Kills}/{s.Deaths}/{s.Assists} | ACS: {r.Acs:F0} | KDA: {s.Kda:F2} | HS%: {s.HeadshotPercentage:F1}%{weaponLine} | Rating: {r.Rating}{historyLine}{rankLine}{profileLine}
                 """;
         }));
 
@@ -250,6 +254,46 @@ public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messa
         var names = string.Join(", ", results.Select(r => $"**{r.MatchPlayer.Name}**"));
         var outcome = first.Won ? "won" : "lost";
         return $"👥 {names} stacked on {first.MapName} and {outcome} {first.Score}. Yikes.";
+    }
+
+    private static string FormatProfileForPrompt(PlayerProfile? profile)
+    {
+        if (profile is null)
+            return "";
+
+        var lines = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(profile.Bio))
+            lines.Add($"- Bio: \"{profile.Bio}\"");
+
+        var allTraits = profile.ManualTraits.Concat(profile.AutoTraits).ToList();
+        if (allTraits.Count > 0)
+            lines.Add($"- Known traits: {string.Join(", ", allTraits)}");
+
+        if (lines.Count == 0)
+            return "";
+
+        return $"\nPlayer Profile:\n{string.Join("\n", lines)}\n";
+    }
+
+    private static string FormatProfileLineForSquad(PlayerProfile? profile)
+    {
+        if (profile is null)
+            return "";
+
+        var parts = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(profile.Bio))
+            parts.Add($"\"{profile.Bio}\"");
+
+        var allTraits = profile.ManualTraits.Concat(profile.AutoTraits).ToList();
+        if (allTraits.Count > 0)
+            parts.Add(string.Join(", ", allTraits));
+
+        if (parts.Count == 0)
+            return "";
+
+        return $"\n    Profile: {string.Join(" | ", parts)}";
     }
 
     private static string FormatWeaponContext(WeaponContext? ctx)
