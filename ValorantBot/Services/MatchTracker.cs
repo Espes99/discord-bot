@@ -49,6 +49,27 @@ public class MatchTracker : IMatchTracker
 
     public static string PlayerKey(string name, string tag) => $"{name}#{tag}";
 
+    /// <summary>
+    /// Migrates data stored under an old key to a new key.
+    /// Returns true if a migration was performed.
+    /// </summary>
+    public bool MigrateKey(string oldKey, string newKey)
+    {
+        lock (_lock)
+        {
+            if (!_lastMatchIds.TryGetValue(oldKey, out var value))
+                return false;
+
+            if (oldKey == newKey)
+                return false;
+
+            _lastMatchIds[newKey] = value;
+            _lastMatchIds.Remove(oldKey);
+            Save();
+            return true;
+        }
+    }
+
     private void Load()
     {
         _logger.LogInformation("Match tracker file path: {Path}", _filePath);

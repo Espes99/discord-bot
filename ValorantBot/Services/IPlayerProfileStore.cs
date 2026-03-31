@@ -11,4 +11,5 @@ public interface IPlayerProfileStore
     void UpdateAutoTraits(string playerKey, List<string> traits);
     bool IsProfileCommandPublic { get; }
     void SetProfileCommandPublic(bool isPublic);
+    bool MigrateKey(string oldKey, string newKey);
 }

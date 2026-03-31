@@ -101,6 +101,26 @@ public class PlayerProfileStore : IPlayerProfileStore
         }
     }
 
+    public bool MigrateKey(string oldKey, string newKey)
+    {
+        lock (_lock)
+        {
+            var normalizedOld = oldKey.ToLowerInvariant();
+            var normalizedNew = newKey.ToLowerInvariant();
+
+            if (normalizedOld == normalizedNew)
+                return false;
+
+            if (!_profiles.TryGetValue(normalizedOld, out var profile))
+                return false;
+
+            _profiles[normalizedNew] = profile;
+            _profiles.Remove(normalizedOld);
+            Save();
+            return true;
+        }
+    }
+
     private PlayerProfile GetOrCreateProfile(string playerKey)
     {
         var key = playerKey.ToLowerInvariant();

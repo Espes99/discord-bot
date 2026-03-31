@@ -20,11 +20,24 @@ public class Worker(
     IOptions<PollingSettings> pollingOptions,
     IOptions<BotAdminSettings> botAdminOptions,
     ITrackedPlayerStore trackedPlayerStore,
+    IDataMigrator dataMigrator,
     ILogger<Worker> logger) : BackgroundService
 {
     private readonly DateTimeOffset _startedAt = DateTimeOffset.UtcNow;
     private DateTimeOffset? _lastPollAt;
     private DateTimeOffset? _nextPollAt;
+
+    /// <summary>
+    /// Returns the store key for a tracked player: puuid if available, otherwise name#tag.
+    /// </summary>
+    private static string StoreKey(TrackedPlayer player) =>
+        !string.IsNullOrEmpty(player.Puuid) ? player.Puuid : MatchTracker.PlayerKey(player.Name, player.Tag);
+
+    /// <summary>
+    /// Resolves a tracked player from name+tag input, checking the tracked store first.
+    /// </summary>
+    private TrackedPlayer? ResolveTrackedPlayer(string name, string tag) =>
+        trackedPlayerStore.FindByNameTag(name, tag);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -41,6 +54,16 @@ public class Worker(
         discord.OnToggleProfileCommand += HandleToggleProfileCommandAsync;
         await discord.StartAsync(stoppingToken);
         await discord.WaitUntilReadyAsync(stoppingToken);
+
+        // Migrate legacy data (name#tag keys -> puuid) for tracked players missing puuid
+        try
+        {
+            await dataMigrator.MigrateAsync(stoppingToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Data migration encountered an error, continuing with startup");
+        }
 
         var interval = TimeSpan.FromSeconds(pollingOptions.Value.IntervalSeconds);
         logger.LogInformation("Polling {Count} tracked player(s) every {Interval}s",
@@ -127,16 +150,17 @@ public class Worker(
         // Send individual messages first, before squad messages
         foreach (var result in newResults.Where(r => !squadResults.Contains(r)))
         {
-            var playerKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
-            var previousRank = matchHistoryStore.GetLastRank(playerKey);
+            var key = StoreKey(result.Player);
+            DetectAndApplyNameChange(result);
+            var previousRank = matchHistoryStore.GetLastRank(key);
             var rankChange = DetectRankChange(result, previousRank);
 
             var sent = await discord.SendPerformanceMessageAsync(result, rankChange);
             if (sent)
             {
-                matchTracker.SetLastMatch(playerKey, result.MatchData.Metadata.MatchId);
-                matchHistoryStore.AddMatch(playerKey, MatchHistoryEntry.FromPerformanceResult(result));
-                UpdateAutoTraits(playerKey);
+                matchTracker.SetLastMatch(key, result.MatchData.Metadata.MatchId);
+                matchHistoryStore.AddMatch(key, MatchHistoryEntry.FromPerformanceResult(result));
+                UpdateAutoTraits(key);
             }
         }
 
@@ -152,11 +176,12 @@ public class Worker(
             var rankChanges = new Dictionary<string, RankChangeInfo>();
             foreach (var result in members)
             {
-                var playerKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
-                var previousRank = matchHistoryStore.GetLastRank(playerKey);
+                var key = StoreKey(result.Player);
+                DetectAndApplyNameChange(result);
+                var previousRank = matchHistoryStore.GetLastRank(key);
                 var rankChange = DetectRankChange(result, previousRank);
                 if (rankChange is not null)
-                    rankChanges[playerKey] = rankChange;
+                    rankChanges[key] = rankChange;
             }
 
             var sent = await discord.SendSquadMessageAsync(members, rankChanges.Count > 0 ? rankChanges : null);
@@ -164,10 +189,10 @@ public class Worker(
             {
                 foreach (var result in members)
                 {
-                    var playerKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
-                    matchTracker.SetLastMatch(playerKey, result.MatchData.Metadata.MatchId);
-                    matchHistoryStore.AddMatch(playerKey, MatchHistoryEntry.FromPerformanceResult(result));
-                    UpdateAutoTraits(playerKey);
+                    var key = StoreKey(result.Player);
+                    matchTracker.SetLastMatch(key, result.MatchData.Metadata.MatchId);
+                    matchHistoryStore.AddMatch(key, MatchHistoryEntry.FromPerformanceResult(result));
+                    UpdateAutoTraits(key);
                 }
             }
         }
@@ -176,12 +201,12 @@ public class Worker(
     private RankChangeInfo? DetectRankChange(PerformanceResult result, string? previousRank)
     {
         var currentRank = result.MatchPlayer.Tier?.Name;
-        var playerKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
+        var displayKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
 
         if (string.IsNullOrEmpty(currentRank) || string.IsNullOrEmpty(previousRank))
         {
             if (!string.IsNullOrEmpty(currentRank) && string.IsNullOrEmpty(previousRank))
-                logger.LogInformation("Seeding initial rank for {Key}: {Rank}", playerKey, currentRank);
+                logger.LogInformation("Seeding initial rank for {Key}: {Rank}", displayKey, currentRank);
             return null;
         }
 
@@ -191,7 +216,7 @@ public class Worker(
         var isPromotion = IsPromotion(previousRank, currentRank);
         var isMajor = IsMajorRankChange(previousRank, currentRank);
         logger.LogInformation("Rank change for {Key}: {Old} -> {New} ({Direction}, {Severity})",
-            playerKey, previousRank, currentRank,
+            displayKey, previousRank, currentRank,
             isPromotion ? "promotion" : "demotion",
             isMajor ? "major" : "minor");
 
@@ -239,16 +264,18 @@ public class Worker(
         if (result is null)
             return null;
 
-        var playerKey = MatchTracker.PlayerKey(player.Name, player.Tag);
+        var key = StoreKey(player);
         var matchId = result.MatchData.Metadata.MatchId;
 
-        if (!matchTracker.IsNewMatch(playerKey, matchId))
+        if (!matchTracker.IsNewMatch(key, matchId))
         {
-            logger.LogInformation("Already seen match {MatchId} for {Key}, skipping", matchId, playerKey);
+            logger.LogInformation("Already seen match {MatchId} for {Key}, skipping",
+                matchId, MatchTracker.PlayerKey(player.Name, player.Tag));
             return null;
         }
 
-        logger.LogInformation("New match detected for {Key}: {MatchId}", playerKey, matchId);
+        logger.LogInformation("New match detected for {Key}: {MatchId}",
+            MatchTracker.PlayerKey(player.Name, player.Tag), matchId);
         return result;
     }
 
@@ -258,7 +285,8 @@ public class Worker(
 
         var name = command.Data.Options.First(o => o.Name == "name").Value.ToString()!;
         var tag = command.Data.Options.First(o => o.Name == "tag").Value.ToString()!;
-        var player = new TrackedPlayer { Name = name, Tag = tag, Region = "eu" };
+        var player = trackedPlayerStore.FindByNameTag(name, tag)
+            ?? new TrackedPlayer { Name = name, Tag = tag, Region = "eu" };
 
         try
         {
@@ -305,7 +333,31 @@ public class Worker(
         var regionOption = command.Data.Options.FirstOrDefault(o => o.Name == "region");
         var region = regionOption?.Value?.ToString() ?? "eu";
 
-        var player = new TrackedPlayer { Name = name, Tag = tag, Region = region };
+        // Resolve puuid from the HenrikDev account API
+        string? puuid = null;
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var henrikClient = scope.ServiceProvider.GetRequiredService<IHenrikDevClient>();
+            var account = await henrikClient.GetAccountAsync(name, tag);
+            if (account is not null)
+            {
+                puuid = account.Puuid;
+                // Use the canonical name/tag from the API
+                name = account.Name;
+                tag = account.Tag;
+            }
+            else
+            {
+                logger.LogWarning("Could not resolve puuid for {Name}#{Tag}, tracking without puuid", name, tag);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to resolve puuid for {Name}#{Tag}, tracking without puuid", name, tag);
+        }
+
+        var player = new TrackedPlayer { Puuid = puuid, Name = name, Tag = tag, Region = region };
         var added = trackedPlayerStore.Add(player);
 
         if (!added)
@@ -314,8 +366,9 @@ public class Worker(
             return;
         }
 
-        logger.LogInformation("{User} added tracked player {Name}#{Tag} ({Region})",
-            command.User.Username, name, tag, region);
+        var puuidInfo = puuid is not null ? $", puuid: {puuid[..8]}..." : ", puuid pending";
+        logger.LogInformation("{User} added tracked player {Name}#{Tag} ({Region}{Puuid})",
+            command.User.Username, name, tag, region, puuidInfo);
         await command.FollowupAsync($"Now tracking **{name}#{tag}** ({region}).", ephemeral: true);
     }
 
@@ -385,7 +438,7 @@ public class Worker(
                 var playerLines = new List<string>();
                 foreach (var player in players)
                 {
-                    var key = MatchTracker.PlayerKey(player.Name, player.Tag);
+                    var key = StoreKey(player);
                     var lastMatchId = matchTracker.GetLastMatchId(key);
                     var history = matchHistoryStore.GetHistory(key);
                     var lastEntry = history
@@ -598,8 +651,9 @@ public class Worker(
         var tag = command.Data.Options.First(o => o.Name == "tag").Value.ToString()!;
         var bio = command.Data.Options.First(o => o.Name == "bio").Value.ToString()!;
 
-        var playerKey = MatchTracker.PlayerKey(name, tag);
-        playerProfileStore.SetBio(playerKey, bio);
+        var tracked = ResolveTrackedPlayer(name, tag);
+        var key = tracked is not null ? StoreKey(tracked) : MatchTracker.PlayerKey(name, tag);
+        playerProfileStore.SetBio(key, bio);
 
         logger.LogInformation("{User} set bio for {Name}#{Tag}: {Bio}",
             command.User.Username, name, tag, bio);
@@ -620,8 +674,9 @@ public class Worker(
         var tag = command.Data.Options.First(o => o.Name == "tag").Value.ToString()!;
         var trait = command.Data.Options.First(o => o.Name == "trait").Value.ToString()!;
 
-        var playerKey = MatchTracker.PlayerKey(name, tag);
-        playerProfileStore.AddManualTrait(playerKey, trait);
+        var tracked = ResolveTrackedPlayer(name, tag);
+        var key = tracked is not null ? StoreKey(tracked) : MatchTracker.PlayerKey(name, tag);
+        playerProfileStore.AddManualTrait(key, trait);
 
         logger.LogInformation("{User} added trait for {Name}#{Tag}: {Trait}",
             command.User.Username, name, tag, trait);
@@ -641,17 +696,18 @@ public class Worker(
         var name = command.Data.Options.First(o => o.Name == "name").Value.ToString()!;
         var tag = command.Data.Options.First(o => o.Name == "tag").Value.ToString()!;
 
-        var playerKey = MatchTracker.PlayerKey(name, tag);
+        var tracked = ResolveTrackedPlayer(name, tag);
+        var key = tracked is not null ? StoreKey(tracked) : MatchTracker.PlayerKey(name, tag);
 
         // Generate auto traits on-demand if the player has history but no profile yet
-        var profile = playerProfileStore.GetProfile(playerKey);
+        var profile = playerProfileStore.GetProfile(key);
         if (profile is null)
         {
-            var history = matchHistoryStore.GetHistory(playerKey);
+            var history = matchHistoryStore.GetHistory(key);
             if (history.Count > 0)
             {
-                UpdateAutoTraits(playerKey);
-                profile = playerProfileStore.GetProfile(playerKey);
+                UpdateAutoTraits(key);
+                profile = playerProfileStore.GetProfile(key);
             }
         }
 
@@ -706,6 +762,43 @@ public class Worker(
         var summary = HistorySummarizer.Summarize(history);
         var autoTraits = ProfileTraitDeriver.DeriveTraits(history, summary);
         playerProfileStore.UpdateAutoTraits(playerKey, autoTraits);
+    }
+
+    /// <summary>
+    /// Checks if the API returned a different name/tag than we have stored.
+    /// If so, silently updates the tracked player. Also backfills puuid if missing.
+    /// </summary>
+    private void DetectAndApplyNameChange(PerformanceResult result)
+    {
+        var player = result.Player;
+        var apiName = result.MatchPlayer.Name;
+        var apiTag = result.MatchPlayer.Tag;
+        var apiPuuid = result.MatchPlayer.Puuid;
+
+        var changed = false;
+
+        // Backfill puuid if we did not have it
+        if (string.IsNullOrEmpty(player.Puuid) && !string.IsNullOrEmpty(apiPuuid))
+        {
+            logger.LogInformation("Resolved puuid for {Name}#{Tag}: {Puuid}",
+                player.Name, player.Tag, apiPuuid);
+            player.Puuid = apiPuuid;
+            changed = true;
+        }
+
+        // Detect name/tag change
+        if (!string.Equals(player.Name, apiName, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(player.Tag, apiTag, StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogInformation("Name change detected: {OldName}#{OldTag} -> {NewName}#{NewTag}",
+                player.Name, player.Tag, apiName, apiTag);
+            player.Name = apiName;
+            player.Tag = apiTag;
+            changed = true;
+        }
+
+        if (changed)
+            trackedPlayerStore.UpdatePlayer(player);
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)

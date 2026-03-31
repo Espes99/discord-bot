@@ -265,3 +265,32 @@ public class MmrCurrent
     [JsonPropertyName("last_change")]
     public int LastChange { get; set; }
 }
+
+// --- Account Lookup (v1) ---
+
+public class AccountResponse
+{
+    [JsonPropertyName("status")]
+    public int Status { get; set; }
+
+    [JsonPropertyName("data")]
+    public AccountData Data { get; set; } = new();
+}
+
+public class AccountData
+{
+    [JsonPropertyName("puuid")]
+    public string Puuid { get; set; } = string.Empty;
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("tag")]
+    public string Tag { get; set; } = string.Empty;
+
+    [JsonPropertyName("region")]
+    public string? Region { get; set; }
+
+    [JsonPropertyName("account_level")]
+    public int AccountLevel { get; set; }
+}

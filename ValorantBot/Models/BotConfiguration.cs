@@ -31,10 +31,17 @@ public class HenrikDevSettings
 }
 
 /// <summary>
-/// Represents a Valorant player to track.
+/// Represents a Valorant player to track. Puuid is the stable identity;
+/// Name and Tag may change when a player updates their Riot ID.
 /// </summary>
 public class TrackedPlayer
 {
+    /// <summary>
+    /// Riot puuid, the stable identifier that survives name changes.
+    /// Null for legacy entries that have not yet been resolved.
+    /// </summary>
+    public string? Puuid { get; set; }
+
     [Required(ErrorMessage = "Player name is required.")]
     public string Name { get; set; } = string.Empty;
 

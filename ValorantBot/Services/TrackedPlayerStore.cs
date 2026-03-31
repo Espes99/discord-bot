@@ -41,13 +41,17 @@ public class TrackedPlayerStore : ITrackedPlayerStore
     {
         lock (_lock)
         {
+            // Check by puuid first if available, then by name+tag
+            if (player.Puuid is not null && FindByPuuid_Locked(player.Puuid) is not null)
+                return false;
+
             if (Contains_Locked(player.Name, player.Tag))
                 return false;
 
             _players.Add(player);
             Save();
-            _logger.LogInformation("Now tracking {Name}#{Tag} ({Region})",
-                player.Name, player.Tag, player.Region);
+            _logger.LogInformation("Now tracking {Name}#{Tag} ({Region}, puuid: {Puuid})",
+                player.Name, player.Tag, player.Region, player.Puuid ?? "pending");
             return true;
         }
     }
@@ -73,8 +77,31 @@ public class TrackedPlayerStore : ITrackedPlayerStore
             return Contains_Locked(name, tag);
     }
 
+    public TrackedPlayer? FindByPuuid(string puuid)
+    {
+        lock (_lock)
+            return FindByPuuid_Locked(puuid);
+    }
+
+    public TrackedPlayer? FindByNameTag(string name, string tag)
+    {
+        lock (_lock)
+            return Find_Locked(name, tag);
+    }
+
+    public void UpdatePlayer(TrackedPlayer player)
+    {
+        lock (_lock)
+            Save();
+    }
+
     private bool Contains_Locked(string name, string tag) =>
         Find_Locked(name, tag) is not null;
+
+    private TrackedPlayer? FindByPuuid_Locked(string puuid) =>
+        _players.FirstOrDefault(p =>
+            !string.IsNullOrEmpty(p.Puuid) &&
+            string.Equals(p.Puuid, puuid, StringComparison.OrdinalIgnoreCase));
 
     private TrackedPlayer? Find_Locked(string name, string tag) =>
         _players.FirstOrDefault(p =>
