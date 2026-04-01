@@ -22,7 +22,7 @@ public class MatchHistoryEntry
 
     public string? Rank { get; init; }
 
-    public static MatchHistoryEntry FromPerformanceResult(PerformanceResult result) => new()
+    public static MatchHistoryEntry FromPerformanceResult(PerformanceResult result, string? rankOverride = null) => new()
     {
         MatchId = result.MatchData.Metadata.MatchId,
         PlayedAt = result.MatchData.Metadata.StartedAt,
@@ -37,6 +37,6 @@ public class MatchHistoryEntry
         Kda = result.MatchPlayer.Stats.Kda,
         HeadshotPercent = result.MatchPlayer.Stats.HeadshotPercentage,
         Rating = result.Rating,
-        Rank = result.MatchPlayer.Tier?.Name
+        Rank = rankOverride ?? result.MatchPlayer.Tier?.Name
     };
 }

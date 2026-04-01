@@ -154,14 +154,27 @@ public class Worker(
         {
             var key = StoreKey(result.Player);
             DetectAndApplyNameChange(result);
-            var previousRank = matchHistoryStore.GetLastRank(key);
-            var rankChange = DetectRankChange(result, previousRank);
+
+            var matchStartRank = result.MatchPlayer.Tier?.Name;
+            string? currentRank = null;
+            RankChangeInfo? rankChange = null;
+            try
+            {
+                var mmr = await GetPlayerMmrDataAsync(result.Player, ct);
+                currentRank = mmr?.Current.Tier?.Name;
+                var displayKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
+                rankChange = DetectRankChange(matchStartRank, currentRank, displayKey);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "MMR lookup failed for {Key}, skipping rank change detection", key);
+            }
 
             var sent = await discord.SendPerformanceMessageAsync(result, rankChange);
             if (sent)
             {
                 matchTracker.SetLastMatch(key, result.MatchData.Metadata.MatchId);
-                matchHistoryStore.AddMatch(key, MatchHistoryEntry.FromPerformanceResult(result));
+                matchHistoryStore.AddMatch(key, MatchHistoryEntry.FromPerformanceResult(result, currentRank));
                 UpdateAutoTraits(key);
             }
         }
@@ -176,14 +189,26 @@ public class Worker(
 
             // Detect rank changes for all squad members before sending
             var rankChanges = new Dictionary<string, RankChangeInfo>();
+            var currentRanks = new Dictionary<string, string?>();
             foreach (var result in members)
             {
                 var key = StoreKey(result.Player);
                 DetectAndApplyNameChange(result);
-                var previousRank = matchHistoryStore.GetLastRank(key);
-                var rankChange = DetectRankChange(result, previousRank);
-                if (rankChange is not null)
-                    rankChanges[key] = rankChange;
+                var matchStartRank = result.MatchPlayer.Tier?.Name;
+                try
+                {
+                    var mmr = await GetPlayerMmrDataAsync(result.Player, ct);
+                    var currentRank = mmr?.Current.Tier?.Name;
+                    currentRanks[key] = currentRank;
+                    var displayKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
+                    var rankChange = DetectRankChange(matchStartRank, currentRank, displayKey);
+                    if (rankChange is not null)
+                        rankChanges[key] = rankChange;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "MMR lookup failed for {Key}, skipping rank change detection", key);
+                }
             }
 
             var sent = await discord.SendSquadMessageAsync(members, rankChanges.Count > 0 ? rankChanges : null);
@@ -193,42 +218,47 @@ public class Worker(
                 {
                     var key = StoreKey(result.Player);
                     matchTracker.SetLastMatch(key, result.MatchData.Metadata.MatchId);
-                    matchHistoryStore.AddMatch(key, MatchHistoryEntry.FromPerformanceResult(result));
+                    var currentRank = currentRanks.GetValueOrDefault(key);
+                    matchHistoryStore.AddMatch(key, MatchHistoryEntry.FromPerformanceResult(result, currentRank));
                     UpdateAutoTraits(key);
                 }
             }
         }
     }
 
-    private RankChangeInfo? DetectRankChange(PerformanceResult result, string? previousRank)
+    private RankChangeInfo? DetectRankChange(string? matchStartRank, string? currentRank, string displayKey)
     {
-        var currentRank = result.MatchPlayer.Tier?.Name;
-        var displayKey = MatchTracker.PlayerKey(result.Player.Name, result.Player.Tag);
-
-        if (string.IsNullOrEmpty(currentRank) || string.IsNullOrEmpty(previousRank))
+        if (string.IsNullOrEmpty(currentRank) || string.IsNullOrEmpty(matchStartRank))
         {
-            if (!string.IsNullOrEmpty(currentRank) && string.IsNullOrEmpty(previousRank))
+            if (!string.IsNullOrEmpty(currentRank) && string.IsNullOrEmpty(matchStartRank))
                 logger.LogInformation("Seeding initial rank for {Key}: {Rank}", displayKey, currentRank);
             return null;
         }
 
-        if (string.Equals(currentRank, previousRank, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(currentRank, matchStartRank, StringComparison.OrdinalIgnoreCase))
             return null;
 
-        var isPromotion = IsPromotion(previousRank, currentRank);
-        var isMajor = IsMajorRankChange(previousRank, currentRank);
+        var isPromotion = IsPromotion(matchStartRank, currentRank);
+        var isMajor = IsMajorRankChange(matchStartRank, currentRank);
         logger.LogInformation("Rank change for {Key}: {Old} -> {New} ({Direction}, {Severity})",
-            displayKey, previousRank, currentRank,
+            displayKey, matchStartRank, currentRank,
             isPromotion ? "promotion" : "demotion",
             isMajor ? "major" : "minor");
 
         return new RankChangeInfo
         {
-            OldRank = previousRank,
+            OldRank = matchStartRank,
             NewRank = currentRank,
             IsPromotion = isPromotion,
             IsMajor = isMajor
         };
+    }
+
+    private async Task<MmrData?> GetPlayerMmrDataAsync(TrackedPlayer player, CancellationToken ct)
+    {
+        using var scope = scopeFactory.CreateScope();
+        var henrikClient = scope.ServiceProvider.GetRequiredService<IHenrikDevClient>();
+        return await henrikClient.GetPlayerMmrAsync(player.Name, player.Tag, player.Region, ct);
     }
 
     private static bool IsPromotion(string oldRank, string newRank)
