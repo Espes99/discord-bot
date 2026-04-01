@@ -48,10 +48,29 @@ public class DiscordNotifier : IDiscordNotifier
 
     private const int MaxMessageLength = 2000;
 
-    private static string TruncateMessage(string message)
+    private static List<string> SplitMessage(string message)
     {
-        if (message.Length <= MaxMessageLength) return message;
-        return message[..(MaxMessageLength - 3)] + "...";
+        if (message.Length <= MaxMessageLength) return [message];
+
+        var chunks = new List<string>();
+        var remaining = message.AsSpan();
+        while (remaining.Length > 0)
+        {
+            if (remaining.Length <= MaxMessageLength)
+            {
+                chunks.Add(remaining.ToString());
+                break;
+            }
+
+            var chunk = remaining[..MaxMessageLength];
+            var splitIndex = chunk.LastIndexOf('\n');
+            if (splitIndex <= 0) splitIndex = MaxMessageLength;
+
+            chunks.Add(remaining[..splitIndex].ToString());
+            remaining = remaining[splitIndex..].TrimStart('\n');
+        }
+
+        return chunks;
     }
 
     private static string StoreKey(TrackedPlayer player) =>
@@ -275,7 +294,10 @@ public class DiscordNotifier : IDiscordNotifier
         var message = await _messageGenerator.GenerateMessageAsync(result, history, rankChange);
         var embed = BuildEmbed(result, rankChange);
 
-        await channel.SendMessageAsync(text: TruncateMessage(message), embed: embed);
+        var chunks = SplitMessage(message);
+        await channel.SendMessageAsync(text: chunks[0], embed: embed);
+        for (var i = 1; i < chunks.Count; i++)
+            await channel.SendMessageAsync(text: chunks[i]);
         _logger.LogInformation("Sent {Rating} message for {Player} to Discord",
             result.Rating, result.Player.Name);
         return true;
@@ -310,7 +332,10 @@ public class DiscordNotifier : IDiscordNotifier
             var rc = rankChanges is not null && rankChanges.TryGetValue(key, out var change) ? change : null;
             return BuildEmbed(r, rc);
         }).ToArray();
-        await channel.SendMessageAsync(text: TruncateMessage(message), embeds: embeds);
+        var chunks = SplitMessage(message);
+        await channel.SendMessageAsync(text: chunks[0], embeds: embeds);
+        for (var i = 1; i < chunks.Count; i++)
+            await channel.SendMessageAsync(text: chunks[i]);
 
         var names = string.Join(", ", results.Select(r => r.Player.Name));
         _logger.LogInformation("Sent squad message for [{Players}] to Discord", names);
@@ -385,7 +410,10 @@ public class DiscordNotifier : IDiscordNotifier
             .WithTimestamp(DateTimeOffset.UtcNow)
             .Build();
 
-        await channel.SendMessageAsync(text: TruncateMessage(message), embed: embed);
+        var chunks = SplitMessage(message);
+        await channel.SendMessageAsync(text: chunks[0], embed: embed);
+        for (var i = 1; i < chunks.Count; i++)
+            await channel.SendMessageAsync(text: chunks[i]);
         _logger.LogInformation("Sent rank change message for {Player}: {Old} -> {New}",
             playerName, oldRank, newRank);
         return true;
