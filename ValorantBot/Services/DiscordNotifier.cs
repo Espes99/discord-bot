@@ -46,6 +46,14 @@ public class DiscordNotifier : IDiscordNotifier
 
     private readonly IMatchHistoryStore _historyStore;
 
+    private const int MaxMessageLength = 2000;
+
+    private static string TruncateMessage(string message)
+    {
+        if (message.Length <= MaxMessageLength) return message;
+        return message[..(MaxMessageLength - 3)] + "...";
+    }
+
     private static string StoreKey(TrackedPlayer player) =>
         !string.IsNullOrEmpty(player.Puuid) ? player.Puuid : MatchTracker.PlayerKey(player.Name, player.Tag);
 
@@ -267,7 +275,7 @@ public class DiscordNotifier : IDiscordNotifier
         var message = await _messageGenerator.GenerateMessageAsync(result, history, rankChange);
         var embed = BuildEmbed(result, rankChange);
 
-        await channel.SendMessageAsync(text: message, embed: embed);
+        await channel.SendMessageAsync(text: TruncateMessage(message), embed: embed);
         _logger.LogInformation("Sent {Rating} message for {Player} to Discord",
             result.Rating, result.Player.Name);
         return true;
@@ -302,7 +310,7 @@ public class DiscordNotifier : IDiscordNotifier
             var rc = rankChanges is not null && rankChanges.TryGetValue(key, out var change) ? change : null;
             return BuildEmbed(r, rc);
         }).ToArray();
-        await channel.SendMessageAsync(text: message, embeds: embeds);
+        await channel.SendMessageAsync(text: TruncateMessage(message), embeds: embeds);
 
         var names = string.Join(", ", results.Select(r => r.Player.Name));
         _logger.LogInformation("Sent squad message for [{Players}] to Discord", names);
@@ -377,7 +385,7 @@ public class DiscordNotifier : IDiscordNotifier
             .WithTimestamp(DateTimeOffset.UtcNow)
             .Build();
 
-        await channel.SendMessageAsync(text: message, embed: embed);
+        await channel.SendMessageAsync(text: TruncateMessage(message), embed: embed);
         _logger.LogInformation("Sent rank change message for {Player}: {Old} -> {New}",
             playerName, oldRank, newRank);
         return true;
