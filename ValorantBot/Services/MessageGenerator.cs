@@ -39,7 +39,7 @@ public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messa
           - For MAJOR tier changes (e.g. Silver to Gold, Plat to Diamond): make it dramatic and over the top
           - For minor rank changes (within same tier): a quick mention is enough
         - If player history is provided, reference trends to make roasts more personal (streaks, declining stats, map weaknesses, etc.)
-        - If a PLAYER PROFILE is provided, use it to personalize your roast. Reference their known personality, habits, and tendencies. This is what makes your roasts recognizable and personal to the player.
+        - If a PLAYER PROFILE is provided, you MAY use it as subtle flavor — but don't force it. Only reference profile traits that actually fit what happened in THIS match. For example, don't mention initiator utility habits if the player wasn't playing an initiator. The match stats should always be the main focus; the profile is just seasoning, not the dish. Skip the profile entirely if nothing in it is relevant to the current match.
         - If weapon context is provided, factor it into your HS% commentary. Don't mock low HS% if the player mainly used shotguns, snipers, or LMGs. Mock them for weapon choice instead if anything.
         - Never be mean-spirited about real personal things, keep it about the game
         - Do NOT use any prefix or label. Just output the message directly.
@@ -109,13 +109,14 @@ public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messa
 
         try
         {
-            var systemPrompt = BuildSystemPrompt($"{BaseRules}\n{SoloRules}");
+            var playerMessages = messageHistory.GetRecentPlayerMessages(storeKey);
+            var systemPrompt = BuildSystemPrompt($"{BaseRules}\n{SoloRules}", playerMessages);
             var text = await CallClaudeAsync(systemPrompt, prompt, 600);
 
             if (!string.IsNullOrEmpty(text))
             {
                 logger.LogDebug("Generated message for {Player}: {Message}", result.MatchPlayer.Name, text);
-                messageHistory.AddMessage(text);
+                messageHistory.AddMessage(text, storeKey);
                 return text;
             }
         }
@@ -166,7 +167,8 @@ public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messa
             if (!string.IsNullOrEmpty(text))
             {
                 logger.LogDebug("Generated squad message: {Message}", text);
-                messageHistory.AddMessage(text);
+                foreach (var r in results)
+                    messageHistory.AddMessage(text, StoreKey(r.Player));
                 return text;
             }
         }
@@ -242,7 +244,7 @@ public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messa
         return null;
     }
 
-    private string BuildSystemPrompt(string basePrompt)
+    private string BuildSystemPrompt(string basePrompt, List<string>? playerMessages = null)
     {
         var style = StyleModifiers[Rng.Next(StyleModifiers.Length)];
         var recentMessages = messageHistory.GetRecentMessages();
@@ -257,6 +259,17 @@ public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messa
                 IMPORTANT — Here are your recent messages. You MUST vary your style, sentence structure, vocabulary, and opening words. Do NOT repeat phrases, patterns, or formats from these:
 
                 {recentBlock}
+                """;
+        }
+
+        if (playerMessages is { Count: > 0 })
+        {
+            var playerBlock = string.Join("\n---\n", playerMessages);
+            prompt += $"""
+
+                ALSO — Here are your recent messages about THIS SPECIFIC PLAYER. You MUST use completely different angles, jokes, and references than these. Don't rehash the same roast topics or profile traits you already used for this player:
+
+                {playerBlock}
                 """;
         }
 
