@@ -71,6 +71,15 @@ public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messa
         - If they won, find the weak link who got carried
         """;
 
+    private const string SummaryRules = """
+        Context: adding a tiny banter blurb under a pre-built stats embed summarizing a player's last few matches.
+
+        Additional rules:
+        - Keep it TINY: 1 sentence, max 2. No preamble, no stats recap (the embed already shows numbers).
+        - React to the overall vibe (win streak, loss spiral, hot/cold, carried, inconsistent, one-trick agent, etc.)
+        - Stay in the toxic-but-funny register. If they look good, throw a little shade anyway.
+        """;
+
     private const string RankChangeRules = """
         Context: reacting to a Valorant rank change (no match stats).
 
@@ -214,6 +223,54 @@ public class MessageGenerator(AnthropicClient client, IMessageHistoryStore messa
 
         var emoji = isPromotion ? "📈" : "📉";
         return $"{emoji} **{playerName}** went from **{oldRank}** to **{newRank}**. {(isPromotion ? "Let's go!" : "Yikes.")}";
+    }
+
+    /// <inheritdoc />
+    public async Task<string> GenerateSummaryMessageAsync(string playerName, string storeKey, List<MatchHistoryEntry> recentMatches)
+    {
+        var ordered = recentMatches.OrderByDescending(m => m.PlayedAt).ToList();
+        var wins = ordered.Count(m => m.Won);
+        var losses = ordered.Count - wins;
+        var avgAcs = ordered.Average(m => m.Acs);
+        var avgKda = ordered.Average(m => m.Kda);
+        var avgHs = ordered.Average(m => m.HeadshotPercent);
+
+        var matchLines = string.Join("\n", ordered.Select(m =>
+            $"- {m.Map} as {m.Agent}: {(m.Won ? "WIN" : "LOSS")} {m.Score} | {m.Kills}/{m.Deaths}/{m.Assists} | ACS {m.Acs:F0} | KDA {m.Kda:F2} | HS% {m.HeadshotPercent:F1} | Rating {m.Rating}"));
+
+        var profileBlock = FormatProfileForPrompt(profileStore.GetProfile(storeKey));
+
+        var prompt = $"""
+            Player: {playerName}
+            Matches summarized: {ordered.Count} ({wins}W / {losses}L)
+            Averages: ACS {avgAcs:F0}, KDA {avgKda:F2}, HS% {avgHs:F1}
+
+            Match breakdown (newest first):
+            {matchLines}
+            {profileBlock}
+            Generate a single tiny Discord blurb (1-2 sentences) reacting to this player's recent run.
+            """;
+
+        try
+        {
+            var playerMessages = messageHistory.GetRecentPlayerMessages(storeKey);
+            var systemPrompt = BuildSystemPrompt($"{BaseRules}\n{SummaryRules}", playerMessages);
+            var text = await CallClaudeAsync(systemPrompt, prompt, 200);
+
+            if (!string.IsNullOrEmpty(text))
+            {
+                logger.LogDebug("Generated summary message for {Player}: {Message}", playerName, text);
+                messageHistory.AddMessage(text, storeKey);
+                return text;
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to generate AI summary message, using fallback");
+        }
+
+        var streakEmoji = wins > losses ? "🔥" : wins < losses ? "💀" : "😐";
+        return $"{streakEmoji} **{playerName}**: {wins}W / {losses}L over the last {ordered.Count} matches.";
     }
 
     private async Task<string?> CallClaudeAsync(string systemPrompt, string userPrompt, int maxTokens)

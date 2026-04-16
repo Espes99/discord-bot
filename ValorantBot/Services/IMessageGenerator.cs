@@ -27,4 +27,12 @@ public interface IMessageGenerator
     /// Generates a celebration or roast message for a rank change.
     /// </summary>
     Task<string> GenerateRankChangeMessageAsync(string playerName, string oldRank, string newRank, bool isPromotion, bool isMajorChange);
+
+    /// <summary>
+    /// Generates a very short banter blurb summarizing a player's recent matches.
+    /// </summary>
+    /// <param name="playerName">Display name#tag for the player.</param>
+    /// <param name="storeKey">Player store key used for per-player message history.</param>
+    /// <param name="recentMatches">The matches being summarized, newest first.</param>
+    Task<string> GenerateSummaryMessageAsync(string playerName, string storeKey, List<MatchHistoryEntry> recentMatches);
 }
