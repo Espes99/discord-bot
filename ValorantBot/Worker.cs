@@ -54,6 +54,7 @@ public class Worker(
         discord.OnAddTraitCommand += HandleAddTraitCommandAsync;
         discord.OnProfileCommand += HandleProfileCommandAsync;
         discord.OnToggleProfileCommand += HandleToggleProfileCommandAsync;
+        discord.OnSummaryCommand += HandleSummaryCommandAsync;
         await discord.StartAsync(stoppingToken);
         await discord.WaitUntilReadyAsync(stoppingToken);
 
@@ -829,6 +830,86 @@ public class Worker(
             embed.WithDescription("Profile exists but has no bio, traits, or auto traits yet.");
 
         await command.FollowupAsync(embed: embed.Build(), ephemeral: true);
+    }
+
+    private async Task HandleSummaryCommandAsync(SocketSlashCommand command)
+    {
+        await command.DeferAsync();
+
+        var name = command.Data.Options.First(o => o.Name == "name").Value.ToString()!;
+        var tag = command.Data.Options.First(o => o.Name == "tag").Value.ToString()!;
+        var countOption = command.Data.Options.FirstOrDefault(o => o.Name == "count");
+        var count = countOption?.Value is long rawCount ? (int)rawCount : 3;
+        count = Math.Clamp(count, 1, 20);
+
+        var tracked = ResolveTrackedPlayer(name, tag);
+        var key = tracked is not null ? StoreKey(tracked) : MatchTracker.PlayerKey(name, tag);
+
+        var history = matchHistoryStore.GetHistory(key)
+            .OrderByDescending(h => h.PlayedAt)
+            .Take(count)
+            .ToList();
+
+        if (history.Count == 0)
+        {
+            await command.FollowupAsync($"No match history stored for **{name}#{tag}**.");
+            return;
+        }
+
+        var displayName = $"{name}#{tag}";
+        var embed = BuildSummaryEmbed(displayName, history);
+        await command.FollowupAsync(embed: embed);
+
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var generator = scope.ServiceProvider.GetRequiredService<IMessageGenerator>();
+            var blurb = await generator.GenerateSummaryMessageAsync(displayName, key, history);
+            if (!string.IsNullOrWhiteSpace(blurb))
+                await command.FollowupAsync(blurb);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to generate summary blurb for {Name}#{Tag}", name, tag);
+        }
+    }
+
+    private static Embed BuildSummaryEmbed(string displayName, List<MatchHistoryEntry> history)
+    {
+        var wins = history.Count(h => h.Won);
+        var losses = history.Count - wins;
+        var avgAcs = history.Average(h => h.Acs);
+        var avgKda = history.Average(h => h.Kda);
+        var avgHs = history.Average(h => h.HeadshotPercent);
+
+        var color = wins > losses ? Color.Green : wins < losses ? Color.Red : Color.LightGrey;
+
+        var matchLines = history.Select(h =>
+        {
+            var outcome = h.Won ? "✅" : "❌";
+            var ts = new DateTimeOffset(h.PlayedAt, TimeSpan.Zero).ToUnixTimeSeconds();
+            return $"{outcome} **{h.Map}** as {h.Agent} ({h.Score}) | {h.Kills}/{h.Deaths}/{h.Assists} | ACS {h.Acs:F0} | <t:{ts}:R>";
+        });
+
+        var ratingCounts = history
+            .GroupBy(h => h.Rating)
+            .OrderByDescending(g => g.Count())
+            .Select(g => $"{g.Count()} {g.Key}");
+
+        var embed = new EmbedBuilder()
+            .WithTitle($"Summary: {displayName}")
+            .WithColor(color)
+            .WithDescription($"Last {history.Count} matches: **{wins}W / {losses}L**")
+            .AddField("Avg ACS", $"{avgAcs:F0}", inline: true)
+            .AddField("Avg KDA", $"{avgKda:F2}", inline: true)
+            .AddField("Avg HS%", $"{avgHs:F1}%", inline: true)
+            .AddField("Matches", string.Join("\n", matchLines))
+            .AddField("Ratings", string.Join(", ", ratingCounts))
+            .WithFooter("Valorant Bot")
+            .WithTimestamp(DateTimeOffset.UtcNow)
+            .Build();
+
+        return embed;
     }
 
     private async Task HandleToggleProfileCommandAsync(SocketSlashCommand command)

@@ -54,6 +54,11 @@ public interface IDiscordNotifier : IAsyncDisposable
     event Func<SocketSlashCommand, Task>? OnToggleProfileCommand;
 
     /// <summary>
+    /// Raised when a user invokes the /summary slash command.
+    /// </summary>
+    event Func<SocketSlashCommand, Task>? OnSummaryCommand;
+
+    /// <summary>
     /// Connects the bot to Discord and registers slash commands.
     /// </summary>
     Task StartAsync(CancellationToken ct);

@@ -44,6 +44,9 @@ public class DiscordNotifier : IDiscordNotifier
     /// <inheritdoc />
     public event Func<SocketSlashCommand, Task>? OnToggleProfileCommand;
 
+    /// <inheritdoc />
+    public event Func<SocketSlashCommand, Task>? OnSummaryCommand;
+
     private readonly IMatchHistoryStore _historyStore;
 
     private const int MaxMessageLength = 2000;
@@ -157,6 +160,13 @@ public class DiscordNotifier : IDiscordNotifier
             .WithName("toggle-profile")
             .WithDescription("Toggle whether non-admins can use /profile (admin only)");
 
+        var summaryCommand = new SlashCommandBuilder()
+            .WithName("summary")
+            .WithDescription("Summarize a player's recent matches (default 3)")
+            .AddOption("name", ApplicationCommandOptionType.String, "Player name", isRequired: true)
+            .AddOption("tag", ApplicationCommandOptionType.String, "Player tag (e.g. 1234)", isRequired: true)
+            .AddOption("count", ApplicationCommandOptionType.Integer, "Number of recent matches to summarize (default 3)", isRequired: false);
+
         var guild = _client.GetGuild(_settings.GuildId);
         if (guild is null)
         {
@@ -174,7 +184,8 @@ public class DiscordNotifier : IDiscordNotifier
             setBioCommand.Build(),
             addTraitCommand.Build(),
             profileCommand.Build(),
-            toggleProfileCommand.Build()
+            toggleProfileCommand.Build(),
+            summaryCommand.Build()
         ]);
 
         _isReady = true;
@@ -245,6 +256,13 @@ public class DiscordNotifier : IDiscordNotifier
             case "toggle-profile":
                 if (OnToggleProfileCommand is not null)
                     await OnToggleProfileCommand.Invoke(command);
+                else
+                    await command.RespondAsync("Bot is not fully initialized yet.");
+                break;
+
+            case "summary":
+                if (OnSummaryCommand is not null)
+                    await OnSummaryCommand.Invoke(command);
                 else
                     await command.RespondAsync("Bot is not fully initialized yet.");
                 break;
