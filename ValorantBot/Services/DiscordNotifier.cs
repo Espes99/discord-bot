@@ -162,10 +162,10 @@ public class DiscordNotifier : IDiscordNotifier
 
         var summaryCommand = new SlashCommandBuilder()
             .WithName("summary")
-            .WithDescription("Summarize a player's recent matches (default 3)")
+            .WithDescription("Summarize a player's recent matches (default 12)")
             .AddOption("name", ApplicationCommandOptionType.String, "Player name", isRequired: true)
             .AddOption("tag", ApplicationCommandOptionType.String, "Player tag (e.g. 1234)", isRequired: true)
-            .AddOption("count", ApplicationCommandOptionType.Integer, "Number of recent matches to summarize (default 3)", isRequired: false);
+            .AddOption("count", ApplicationCommandOptionType.Integer, "Number of recent matches to summarize (default 12)", isRequired: false);
 
         var guild = _client.GetGuild(_settings.GuildId);
         if (guild is null)

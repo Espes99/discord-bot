@@ -839,7 +839,7 @@ public class Worker(
         var name = command.Data.Options.First(o => o.Name == "name").Value.ToString()!;
         var tag = command.Data.Options.First(o => o.Name == "tag").Value.ToString()!;
         var countOption = command.Data.Options.FirstOrDefault(o => o.Name == "count");
-        var count = countOption?.Value is long rawCount ? (int)rawCount : 3;
+        var count = countOption?.Value is long rawCount ? (int)rawCount : 12;
         count = Math.Clamp(count, 1, 20);
 
         var tracked = ResolveTrackedPlayer(name, tag);
