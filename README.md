@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/valo-bot-icon.png" alt="Valorant Discord Bot" width="180" />
+</p>
+
 # Valorant Discord Bot
 
 A .NET 9 Discord bot that tracks Valorant match stats for configured players and generates banter/roast messages using Claude AI.
