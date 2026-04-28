@@ -17,6 +17,38 @@ A .NET 9 Discord bot that tracks Valorant match stats for configured players and
 
 Players can also trigger a check on-demand using the `/latest-match <name> <tag>` slash command.
 
+## Examples
+
+### AI-generated squad roast
+
+When two or more tracked players queue together, Claude generates a single message that compares the group. Sample output:
+
+> _sets down coffee, opens the manila folder, pinches the bridge of nose_
+>
+> Alright, let's talk about Fracture. 📋😤
+>
+> Player1 dropped 28 kills and 300 ACS on Chamber, genuinely the only reason this scoreboard doesn't look like a crime scene, while Player2 apparently used his Killjoy turret as a personal babysitter, going 13/17 with 180 ACS and almost certainly spending the back half of the match typing "WHY IS NOBODY WAITING FOR MY UTIL" into team chat while his own Killjoy lockdown got walked through by a running Sage. 💀🤖 Brother, your KDA sits at 0.94, you died more than you contributed, on a sentinel, on a map designed for sentinel anchoring, which is a genuinely special kind of failure.
+>
+> Player3 queued on Jett, the dash-in-get-a-kill agent, went 19/20 and somehow managed to die more than he killed while Player1 was busy running laps around everyone on 72 more ACS, so maybe park the "I'm better than everyone" energy until you're not posting a below-average ACS on the game's premiere entry duelist. 🔪📉 And Player4 crawled to Diamond 2, congrats on the promotion, genuinely, but 15/16 with a 16.4% headshot rate on a Vandal while saying absolutely nothing on comms until the round was already cooked is a hell of a way to celebrate a rank up. 🥂🪦
+>
+> Four people queued together on Fracture, won by two rounds, and three of them finished below their own historical averages. Player1 carried this squad the same way a forklift carries furniture: completely, without thanks, and clearly resenting every second of it. 🏆🗑️
+
+### Match embed
+
+Each player gets a color-coded stats card with agent, score, KDA, ACS, and HS%. A rank-change card is appended on promotion or demotion.
+
+<p align="center">
+  <img src="assets/example-embed.png" alt="Match embed example" width="380" />
+</p>
+
+### Ranks leaderboard
+
+`/ranks` posts a sorted leaderboard for all tracked players, with medals on the top three and movement indicators next to RR.
+
+<p align="center">
+  <img src="assets/ranks-example.png" alt="Ranks leaderboard example" width="380" />
+</p>
+
 ## Features
 
 - **Competitive-only filtering** - only tracks competitive matches, skipping unranked/custom games
