@@ -68,6 +68,18 @@ public class Worker(
             logger.LogWarning(ex, "Data migration encountered an error, continuing with startup");
         }
 
+        // Repair any tracked players with empty name/tag (resolve from puuid)
+        try
+        {
+            using var repairScope = scopeFactory.CreateScope();
+            var henrikClient = repairScope.ServiceProvider.GetRequiredService<IHenrikDevClient>();
+            await trackedPlayerStore.RepairEmptyNamesAsync(henrikClient, stoppingToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Player name repair encountered an error, continuing with startup");
+        }
+
         var interval = TimeSpan.FromSeconds(pollingOptions.Value.IntervalSeconds);
         logger.LogInformation("Polling {Count} tracked player(s) every {Interval}s",
             trackedPlayerStore.GetAll().Count, interval.TotalSeconds);
@@ -123,6 +135,12 @@ public class Worker(
 
         foreach (var player in players)
         {
+            if (string.IsNullOrWhiteSpace(player.Name) || string.IsNullOrWhiteSpace(player.Tag))
+            {
+                logger.LogWarning("Skipping player with empty name/tag (puuid={Puuid}), needs repair", player.Puuid);
+                continue;
+            }
+
             try
             {
                 var result = await GetNewMatchResultAsync(player, ct);
@@ -259,6 +277,10 @@ public class Worker(
     {
         using var scope = scopeFactory.CreateScope();
         var henrikClient = scope.ServiceProvider.GetRequiredService<IHenrikDevClient>();
+
+        if (!string.IsNullOrEmpty(player.Puuid))
+            return await henrikClient.GetPlayerMmrByPuuidAsync(player.Puuid, player.Region, ct);
+
         return await henrikClient.GetPlayerMmrAsync(player.Name, player.Tag, player.Region, ct);
     }
 
@@ -598,7 +620,9 @@ public class Worker(
             {
                 try
                 {
-                    var mmr = await henrikClient.GetPlayerMmrAsync(player.Name, player.Tag, player.Region);
+                    var mmr = !string.IsNullOrEmpty(player.Puuid)
+                        ? await henrikClient.GetPlayerMmrByPuuidAsync(player.Puuid, player.Region)
+                        : await henrikClient.GetPlayerMmrAsync(player.Name, player.Tag, player.Region);
                     if (mmr is not null && !string.IsNullOrEmpty(mmr.Current.Tier.Name))
                     {
                         var order = GetRankOrder(mmr.Current.Tier.Name);

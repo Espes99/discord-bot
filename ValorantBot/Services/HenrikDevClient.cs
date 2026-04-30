@@ -115,6 +115,54 @@ public class HenrikDevClient(HttpClient httpClient, ILogger<HenrikDevClient> log
     }
 
     /// <inheritdoc />
+    public async Task<AccountData?> GetAccountByPuuidAsync(
+        string puuid, CancellationToken ct = default)
+    {
+        var url = $"v1/by-puuid/account/{Uri.EscapeDataString(puuid)}";
+        logger.LogDebug("Fetching account by puuid: {Url}", url);
+
+        var response = await SendWithRetryAsync(url, ct);
+        if (response is null)
+            return null;
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            logger.LogWarning("Account not found for puuid {Puuid}", puuid);
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+
+        var body = await response.Content.ReadAsStringAsync(ct);
+        var result = JsonSerializer.Deserialize<AccountResponse>(body);
+        return result?.Data;
+    }
+
+    /// <inheritdoc />
+    public async Task<MmrData?> GetPlayerMmrByPuuidAsync(
+        string puuid, string region, CancellationToken ct = default)
+    {
+        var url = $"v3/by-puuid/mmr/{region}/pc/{Uri.EscapeDataString(puuid)}";
+        logger.LogDebug("Fetching MMR by puuid: {Url}", url);
+
+        var response = await SendWithRetryAsync(url, ct);
+        if (response is null)
+            return null;
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            logger.LogWarning("MMR not found for puuid {Puuid}", puuid);
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+
+        var body = await response.Content.ReadAsStringAsync(ct);
+        var result = JsonSerializer.Deserialize<MmrResponse>(body);
+        return result?.Data;
+    }
+
+    /// <inheritdoc />
     public async Task<List<MatchListEntry>> GetRecentMatchesByPuuidAsync(
         string puuid, string region, CancellationToken ct = default)
     {

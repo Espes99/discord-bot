@@ -38,7 +38,17 @@ public interface IHenrikDevClient
     Task<AccountData?> GetAccountAsync(string name, string tag, CancellationToken ct = default);
 
     /// <summary>
+    /// Looks up a Riot account by puuid to resolve the current name and tag.
+    /// </summary>
+    Task<AccountData?> GetAccountByPuuidAsync(string puuid, CancellationToken ct = default);
+
+    /// <summary>
     /// Fetches the most recent matches for a player by puuid (stable across name changes).
     /// </summary>
     Task<List<MatchListEntry>> GetRecentMatchesByPuuidAsync(string puuid, string region, CancellationToken ct = default);
+
+    /// <summary>
+    /// Fetches the current MMR/rank for a player by puuid (stable across name changes).
+    /// </summary>
+    Task<MmrData?> GetPlayerMmrByPuuidAsync(string puuid, string region, CancellationToken ct = default);
 }

@@ -48,8 +48,10 @@ public class DataMigrator(
 
                 // Update the tracked player with puuid and canonical name/tag
                 player.Puuid = puuid;
-                player.Name = account.Name;
-                player.Tag = account.Tag;
+                if (!string.IsNullOrEmpty(account.Name))
+                    player.Name = account.Name;
+                if (!string.IsNullOrEmpty(account.Tag))
+                    player.Tag = account.Tag;
                 trackedPlayerStore.UpdatePlayer(player);
 
                 // Re-key all stores from old name#tag key to puuid

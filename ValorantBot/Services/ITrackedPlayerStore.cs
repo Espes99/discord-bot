@@ -41,4 +41,10 @@ public interface ITrackedPlayerStore
     /// Updates the name, tag, and/or puuid for a tracked player and persists.
     /// </summary>
     void UpdatePlayer(TrackedPlayer player);
+
+    /// <summary>
+    /// Repairs tracked players that have a puuid but empty name/tag by resolving
+    /// their current name from the API.
+    /// </summary>
+    Task RepairEmptyNamesAsync(IHenrikDevClient henrikClient, CancellationToken ct = default);
 }

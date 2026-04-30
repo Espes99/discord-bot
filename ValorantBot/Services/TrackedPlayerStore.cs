@@ -95,6 +95,53 @@ public class TrackedPlayerStore : ITrackedPlayerStore
             Save();
     }
 
+    public async Task RepairEmptyNamesAsync(IHenrikDevClient henrikClient, CancellationToken ct = default)
+    {
+        List<TrackedPlayer> needsRepair;
+        lock (_lock)
+        {
+            needsRepair = _players
+                .Where(p => !string.IsNullOrEmpty(p.Puuid) &&
+                            (string.IsNullOrWhiteSpace(p.Name) || string.IsNullOrWhiteSpace(p.Tag)))
+                .ToList();
+        }
+
+        if (needsRepair.Count == 0)
+            return;
+
+        _logger.LogWarning("Found {Count} tracked player(s) with empty name/tag, attempting repair", needsRepair.Count);
+
+        foreach (var player in needsRepair)
+        {
+            if (ct.IsCancellationRequested) break;
+
+            try
+            {
+                var account = await henrikClient.GetAccountByPuuidAsync(player.Puuid!, ct);
+                if (account is not null && !string.IsNullOrEmpty(account.Name) && !string.IsNullOrEmpty(account.Tag))
+                {
+                    _logger.LogInformation("Repaired player {Puuid}: {Name}#{Tag}",
+                        player.Puuid, account.Name, account.Tag);
+                    player.Name = account.Name;
+                    player.Tag = account.Tag;
+                }
+                else
+                {
+                    _logger.LogWarning("Could not resolve name for puuid {Puuid}, player remains invalid", player.Puuid);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to repair player with puuid {Puuid}", player.Puuid);
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(2), ct);
+        }
+
+        lock (_lock)
+            Save();
+    }
+
     private bool Contains_Locked(string name, string tag) =>
         Find_Locked(name, tag) is not null;
 
@@ -121,6 +168,9 @@ public class TrackedPlayerStore : ITrackedPlayerStore
             var json = File.ReadAllText(_filePath);
             _players = JsonSerializer.Deserialize<List<TrackedPlayer>>(json, JsonOptions) ?? [];
             _logger.LogInformation("Loaded {Count} tracked player(s) from store", _players.Count);
+            foreach (var p in _players)
+                _logger.LogInformation("  Tracked: {Name}#{Tag} (region={Region}, puuid={Puuid})",
+                    p.Name, p.Tag, p.Region, p.Puuid ?? "none");
         }
         catch (Exception ex)
         {
