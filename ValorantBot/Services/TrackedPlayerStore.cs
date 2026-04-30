@@ -118,6 +118,8 @@ public class TrackedPlayerStore : ITrackedPlayerStore
             try
             {
                 var account = await henrikClient.GetAccountByPuuidAsync(player.Puuid!, ct);
+                _logger.LogInformation("Repair lookup for {Puuid}: account={IsNotNull}, name='{Name}', tag='{Tag}'",
+                    player.Puuid, account is not null, account?.Name, account?.Tag);
                 if (account is not null && !string.IsNullOrEmpty(account.Name) && !string.IsNullOrEmpty(account.Tag))
                 {
                     _logger.LogInformation("Repaired player {Puuid}: {Name}#{Tag}",

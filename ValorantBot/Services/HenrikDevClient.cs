@@ -134,6 +134,7 @@ public class HenrikDevClient(HttpClient httpClient, ILogger<HenrikDevClient> log
         response.EnsureSuccessStatusCode();
 
         var body = await response.Content.ReadAsStringAsync(ct);
+        logger.LogDebug("Account by puuid response for {Puuid}: {Body}", puuid, body);
         var result = JsonSerializer.Deserialize<AccountResponse>(body);
         return result?.Data;
     }
