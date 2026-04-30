@@ -33,6 +33,9 @@ public class DiscordNotifier : IDiscordNotifier
     public event Func<SocketSlashCommand, Task>? OnUntrackCommand;
 
     /// <inheritdoc />
+    public event Func<SocketSlashCommand, Task>? OnRepairPlayerCommand;
+
+    /// <inheritdoc />
     public event Func<SocketSlashCommand, Task>? OnSetBioCommand;
 
     /// <inheritdoc />
@@ -136,6 +139,13 @@ public class DiscordNotifier : IDiscordNotifier
             .AddOption("name", ApplicationCommandOptionType.String, "Player name", isRequired: true)
             .AddOption("tag", ApplicationCommandOptionType.String, "Player tag (e.g. 1234)", isRequired: true);
 
+        var repairPlayerCommand = new SlashCommandBuilder()
+            .WithName("repair-player")
+            .WithDescription("Manually set name and tag for a tracked player by puuid (admin only)")
+            .AddOption("puuid", ApplicationCommandOptionType.String, "Player puuid", isRequired: true)
+            .AddOption("name", ApplicationCommandOptionType.String, "Player name", isRequired: true)
+            .AddOption("tag", ApplicationCommandOptionType.String, "Player tag (e.g. 1234)", isRequired: true);
+
         var setBioCommand = new SlashCommandBuilder()
             .WithName("set-bio")
             .WithDescription("Set a player's roast bio (admin only)")
@@ -181,6 +191,7 @@ public class DiscordNotifier : IDiscordNotifier
             ranksCommand.Build(),
             trackCommand.Build(),
             untrackCommand.Build(),
+            repairPlayerCommand.Build(),
             setBioCommand.Build(),
             addTraitCommand.Build(),
             profileCommand.Build(),
@@ -228,6 +239,13 @@ public class DiscordNotifier : IDiscordNotifier
             case "untrack":
                 if (OnUntrackCommand is not null)
                     await OnUntrackCommand.Invoke(command);
+                else
+                    await command.RespondAsync("Bot is not fully initialized yet.");
+                break;
+
+            case "repair-player":
+                if (OnRepairPlayerCommand is not null)
+                    await OnRepairPlayerCommand.Invoke(command);
                 else
                     await command.RespondAsync("Bot is not fully initialized yet.");
                 break;

@@ -50,6 +50,7 @@ public class Worker(
         discord.OnRanksCommand += HandleRanksCommandAsync;
         discord.OnTrackCommand += HandleTrackCommandAsync;
         discord.OnUntrackCommand += HandleUntrackCommandAsync;
+        discord.OnRepairPlayerCommand += HandleRepairPlayerCommandAsync;
         discord.OnSetBioCommand += HandleSetBioCommandAsync;
         discord.OnAddTraitCommand += HandleAddTraitCommandAsync;
         discord.OnProfileCommand += HandleProfileCommandAsync;
@@ -137,8 +138,12 @@ public class Worker(
         {
             if (string.IsNullOrWhiteSpace(player.Name) || string.IsNullOrWhiteSpace(player.Tag))
             {
-                logger.LogWarning("Skipping player with empty name/tag (puuid={Puuid}), needs repair", player.Puuid);
-                continue;
+                if (string.IsNullOrEmpty(player.Puuid))
+                {
+                    logger.LogWarning("Skipping player with empty name/tag and no puuid");
+                    continue;
+                }
+                logger.LogInformation("Player with empty name/tag has puuid {Puuid}, attempting match-based repair", player.Puuid);
             }
 
             try
@@ -453,6 +458,38 @@ public class Worker(
         logger.LogInformation("{User} removed tracked player {Name}#{Tag}",
             command.User.Username, name, tag);
         await command.FollowupAsync($"Stopped tracking **{name}#{tag}**.", ephemeral: true);
+    }
+
+    private async Task HandleRepairPlayerCommandAsync(SocketSlashCommand command)
+    {
+        await command.DeferAsync(ephemeral: true);
+
+        if (!IsAuthorized(command))
+        {
+            await command.FollowupAsync("You don't have permission to use this command.", ephemeral: true);
+            return;
+        }
+
+        var puuid = command.Data.Options.First(o => o.Name == "puuid").Value.ToString()!;
+        var name = command.Data.Options.First(o => o.Name == "name").Value.ToString()!;
+        var tag = command.Data.Options.First(o => o.Name == "tag").Value.ToString()!;
+
+        var player = trackedPlayerStore.FindByPuuid(puuid);
+        if (player is null)
+        {
+            await command.FollowupAsync($"No tracked player found with puuid `{puuid}`.", ephemeral: true);
+            return;
+        }
+
+        var oldName = player.Name;
+        var oldTag = player.Tag;
+        player.Name = name;
+        player.Tag = tag;
+        trackedPlayerStore.UpdatePlayer(player);
+
+        logger.LogInformation("{User} repaired player {Puuid}: '{OldName}#{OldTag}' -> '{Name}#{Tag}'",
+            command.User.Username, puuid, oldName, oldTag, name, tag);
+        await command.FollowupAsync($"Repaired player `{puuid[..8]}...`: **{name}#{tag}**.", ephemeral: true);
     }
 
     private async Task HandleStatusCommandAsync(SocketSlashCommand command)
