@@ -376,9 +376,11 @@ public class Worker(
             if (account is not null)
             {
                 puuid = account.Puuid;
-                // Use the canonical name/tag from the API
-                name = account.Name;
-                tag = account.Tag;
+                // Use the canonical name/tag from the API (only if non-empty)
+                if (!string.IsNullOrEmpty(account.Name))
+                    name = account.Name;
+                if (!string.IsNullOrEmpty(account.Tag))
+                    tag = account.Tag;
             }
             else
             {
@@ -960,9 +962,10 @@ public class Worker(
             changed = true;
         }
 
-        // Detect name/tag change
-        if (!string.Equals(player.Name, apiName, StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(player.Tag, apiTag, StringComparison.OrdinalIgnoreCase))
+        // Detect name/tag change (only apply if API returned non-empty values)
+        if (!string.IsNullOrEmpty(apiName) && !string.IsNullOrEmpty(apiTag) &&
+            (!string.Equals(player.Name, apiName, StringComparison.OrdinalIgnoreCase) ||
+             !string.Equals(player.Tag, apiTag, StringComparison.OrdinalIgnoreCase)))
         {
             logger.LogInformation("Name change detected: {OldName}#{OldTag} -> {NewName}#{NewTag}",
                 player.Name, player.Tag, apiName, apiTag);
