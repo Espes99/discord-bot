@@ -64,6 +64,11 @@ public interface IDiscordNotifier : IAsyncDisposable
     event Func<SocketSlashCommand, Task>? OnRepairPlayerCommand;
 
     /// <summary>
+    /// Raised when a user invokes the /tracked-players slash command.
+    /// </summary>
+    event Func<SocketSlashCommand, Task>? OnTrackedPlayersCommand;
+
+    /// <summary>
     /// Connects the bot to Discord and registers slash commands.
     /// </summary>
     Task StartAsync(CancellationToken ct);

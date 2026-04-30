@@ -56,6 +56,7 @@ public class Worker(
         discord.OnProfileCommand += HandleProfileCommandAsync;
         discord.OnToggleProfileCommand += HandleToggleProfileCommandAsync;
         discord.OnSummaryCommand += HandleSummaryCommandAsync;
+        discord.OnTrackedPlayersCommand += HandleTrackedPlayersCommandAsync;
         await discord.StartAsync(stoppingToken);
         await discord.WaitUntilReadyAsync(stoppingToken);
 
@@ -458,6 +459,49 @@ public class Worker(
         logger.LogInformation("{User} removed tracked player {Name}#{Tag}",
             command.User.Username, name, tag);
         await command.FollowupAsync($"Stopped tracking **{name}#{tag}**.", ephemeral: true);
+    }
+
+    private async Task HandleTrackedPlayersCommandAsync(SocketSlashCommand command)
+    {
+        await command.DeferAsync(ephemeral: true);
+
+        if (!IsAuthorized(command))
+        {
+            await command.FollowupAsync("You don't have permission to use this command.", ephemeral: true);
+            return;
+        }
+
+        var players = trackedPlayerStore.GetAll();
+
+        if (players.Count == 0)
+        {
+            await command.FollowupAsync("No players are currently being tracked.", ephemeral: true);
+            return;
+        }
+
+        var embeds = new List<Embed>();
+        foreach (var player in players)
+        {
+            var embed = new EmbedBuilder()
+                .WithTitle($"{player.Name}#{player.Tag}")
+                .AddField("PUUID", string.IsNullOrEmpty(player.Puuid) ? "_not resolved_" : $"`{player.Puuid}`")
+                .AddField("Name", string.IsNullOrEmpty(player.Name) ? "_empty_" : player.Name, inline: true)
+                .AddField("Tag", string.IsNullOrEmpty(player.Tag) ? "_empty_" : player.Tag, inline: true)
+                .AddField("Region", player.Region, inline: true)
+                .WithColor(Color.Blue)
+                .Build();
+            embeds.Add(embed);
+        }
+
+        // Discord allows max 10 embeds per message
+        for (var i = 0; i < embeds.Count; i += 10)
+        {
+            var batch = embeds.Skip(i).Take(10).ToArray();
+            if (i == 0)
+                await command.FollowupAsync($"**Tracked Players ({players.Count})**", embeds: batch, ephemeral: true);
+            else
+                await command.FollowupAsync(embeds: batch, ephemeral: true);
+        }
     }
 
     private async Task HandleRepairPlayerCommandAsync(SocketSlashCommand command)

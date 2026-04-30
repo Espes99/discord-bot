@@ -50,6 +50,9 @@ public class DiscordNotifier : IDiscordNotifier
     /// <inheritdoc />
     public event Func<SocketSlashCommand, Task>? OnSummaryCommand;
 
+    /// <inheritdoc />
+    public event Func<SocketSlashCommand, Task>? OnTrackedPlayersCommand;
+
     private readonly IMatchHistoryStore _historyStore;
 
     private const int MaxMessageLength = 2000;
@@ -177,6 +180,10 @@ public class DiscordNotifier : IDiscordNotifier
             .AddOption("tag", ApplicationCommandOptionType.String, "Player tag (e.g. 1234)", isRequired: true)
             .AddOption("count", ApplicationCommandOptionType.Integer, "Number of recent matches to summarize (default 12)", isRequired: false);
 
+        var trackedPlayersCommand = new SlashCommandBuilder()
+            .WithName("tracked-players")
+            .WithDescription("List all tracked players with their details (admin only)");
+
         var guild = _client.GetGuild(_settings.GuildId);
         if (guild is null)
         {
@@ -196,7 +203,8 @@ public class DiscordNotifier : IDiscordNotifier
             addTraitCommand.Build(),
             profileCommand.Build(),
             toggleProfileCommand.Build(),
-            summaryCommand.Build()
+            summaryCommand.Build(),
+            trackedPlayersCommand.Build()
         ]);
 
         _isReady = true;
@@ -281,6 +289,13 @@ public class DiscordNotifier : IDiscordNotifier
             case "summary":
                 if (OnSummaryCommand is not null)
                     await OnSummaryCommand.Invoke(command);
+                else
+                    await command.RespondAsync("Bot is not fully initialized yet.");
+                break;
+
+            case "tracked-players":
+                if (OnTrackedPlayersCommand is not null)
+                    await OnTrackedPlayersCommand.Invoke(command);
                 else
                     await command.RespondAsync("Bot is not fully initialized yet.");
                 break;
