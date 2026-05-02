@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text;
 using Discord;
 using Discord.Net;
 using Discord.WebSocket;
@@ -614,7 +615,41 @@ public class Worker(
                     playerLines.Add(line);
                 }
 
-                embed.AddField($"Tracked players ({players.Count})", string.Join("\n\n", playerLines));
+                const int maxFieldLength = 1024;
+                const string separator = "\n\n";
+                var chunks = new List<string>();
+                var current = new StringBuilder();
+                foreach (var line in playerLines)
+                {
+                    var addition = current.Length == 0 ? line : separator + line;
+                    if (current.Length + addition.Length > maxFieldLength)
+                    {
+                        if (current.Length > 0)
+                        {
+                            chunks.Add(current.ToString());
+                            current.Clear();
+                        }
+                        // Single line itself may exceed the limit — truncate defensively.
+                        if (line.Length > maxFieldLength)
+                            chunks.Add(line.Substring(0, maxFieldLength - 1) + "…");
+                        else
+                            current.Append(line);
+                    }
+                    else
+                    {
+                        current.Append(addition);
+                    }
+                }
+                if (current.Length > 0)
+                    chunks.Add(current.ToString());
+
+                for (var i = 0; i < chunks.Count; i++)
+                {
+                    var name = i == 0
+                        ? $"Tracked players ({players.Count})"
+                        : $"Tracked players (cont. {i + 1})";
+                    embed.AddField(name, chunks[i]);
+                }
             }
 
             embed.WithFooter("Valorant Bot");
