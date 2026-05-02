@@ -67,6 +67,11 @@ public class MatchService(
             return null;
         }
 
+        if (string.IsNullOrWhiteSpace(matchPlayer.Name) && !string.IsNullOrWhiteSpace(player.Name))
+            matchPlayer.Name = player.Name;
+        if (string.IsNullOrWhiteSpace(matchPlayer.Tag) && !string.IsNullOrWhiteSpace(player.Tag))
+            matchPlayer.Tag = player.Tag;
+
         var result = performanceAnalyzer.Analyze(player, matchPlayer, details);
 
         logger.LogInformation("{Key} performance: {Rating} -- K/D/A: {K}/{D}/{A}, ACS: {Acs:F0}",

@@ -124,7 +124,7 @@ public class TrackedPlayerStore : ITrackedPlayerStore
                 {
                     _logger.LogInformation("Repaired player {Puuid}: {Name}#{Tag}",
                         player.Puuid, account.Name, account.Tag);
-                    player.Name = account.Name;
+                            player.Name = account.Name;
                     player.Tag = account.Tag;
                 }
                 else
