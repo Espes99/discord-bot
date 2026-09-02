@@ -11,7 +11,10 @@ public class MatchService(
     ILogger<MatchService> logger) : IMatchService
 {
     /// <inheritdoc />
-    public async Task<PerformanceResult?> GetLatestPerformanceAsync(TrackedPlayer player, CancellationToken ct = default)
+    public async Task<PerformanceResult?> GetLatestPerformanceAsync(
+        TrackedPlayer player,
+        IDictionary<string, MatchDetailData>? detailsCache = null,
+        CancellationToken ct = default)
     {
         var displayKey = MatchTracker.PlayerKey(player.Name, player.Tag);
 
@@ -38,15 +41,32 @@ public class MatchService(
         var matchId = latest.Metadata.MatchId;
         logger.LogInformation("Latest match for {Key}: {MatchId}", displayKey, matchId);
 
-        // Pace requests to avoid HenrikDev API rate limits
-        await Task.Delay(TimeSpan.FromSeconds(2), ct);
-
-        var details = await henrikDev.GetMatchDetailsAsync(matchId, player.Region, ct);
-        if (details is null)
+        if (detailsCache is null || !detailsCache.TryGetValue(matchId, out var details))
         {
-            logger.LogWarning("Could not fetch details for match {MatchId}", matchId);
-            return null;
+            // Pace requests to avoid HenrikDev API rate limits
+            await Task.Delay(TimeSpan.FromSeconds(2), ct);
+
+            details = await henrikDev.GetMatchDetailsAsync(matchId, player.Region, ct);
+            if (details is null)
+            {
+                logger.LogWarning("Could not fetch details for match {MatchId}", matchId);
+                return null;
+            }
+
+            detailsCache?.TryAdd(matchId, details);
         }
+        else
+        {
+            logger.LogDebug("Using cached details for match {MatchId}", matchId);
+        }
+
+        return BuildPerformance(player, details);
+    }
+
+    /// <inheritdoc />
+    public PerformanceResult? BuildPerformance(TrackedPlayer player, MatchDetailData details)
+    {
+        var displayKey = MatchTracker.PlayerKey(player.Name, player.Tag);
 
         // Match player by puuid first (stable), fall back to name+tag
         MatchPlayer? matchPlayer = null;
@@ -63,7 +83,7 @@ public class MatchService(
 
         if (matchPlayer is null)
         {
-            logger.LogWarning("Player {Key} not found in match details", displayKey);
+            logger.LogWarning("Player {Key} not found in match {MatchId}", displayKey, details.Metadata.MatchId);
             return null;
         }
 

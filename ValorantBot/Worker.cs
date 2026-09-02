@@ -135,6 +135,7 @@ public class Worker(
 
         // Collect all new results first so we can detect stacks
         var newResults = new List<PerformanceResult>();
+        var detailsCache = new Dictionary<string, MatchDetailData>();
 
         foreach (var player in players)
         {
@@ -150,7 +151,7 @@ public class Worker(
 
             try
             {
-                var result = await GetNewMatchResultAsync(player, ct);
+                var result = await GetNewMatchResultAsync(player, detailsCache, ct);
                 if (result is not null)
                     newResults.Add(result);
             }
@@ -166,6 +167,10 @@ public class Worker(
 
         if (newResults.Count == 0)
             return;
+
+        ExpandResultsFromMatchDetails(newResults, players);
+
+        newResults = newResults.OrderBy(r => r.MatchData.Metadata.StartedAt).ToList();
 
         // Group by match + team to detect stacks
         var squads = newResults
@@ -317,12 +322,63 @@ public class Worker(
         return !string.Equals(tierOf(oldRank), tierOf(newRank), StringComparison.OrdinalIgnoreCase);
     }
 
-    private async Task<PerformanceResult?> GetNewMatchResultAsync(TrackedPlayer player, CancellationToken ct)
+    /// <summary>
+    /// Adds tracked players that took part in an already-detected match but were not
+    /// returned by their own poll. Match details list every participant, so stack
+    /// membership does not depend on each player's match list being up to date
+    /// or on each player's fetch succeeding.
+    /// </summary>
+    private void ExpandResultsFromMatchDetails(List<PerformanceResult> results, IReadOnlyList<TrackedPlayer> players)
     {
         using var scope = scopeFactory.CreateScope();
         var matchService = scope.ServiceProvider.GetRequiredService<IMatchService>();
 
-        var result = await matchService.GetLatestPerformanceAsync(player, ct);
+        foreach (var match in results.GroupBy(r => r.MatchData.Metadata.MatchId).ToList())
+        {
+            var details = match.First().MatchData;
+            var present = match.Select(r => StoreKey(r.Player)).ToHashSet();
+
+            foreach (var player in players)
+            {
+                var key = StoreKey(player);
+                if (present.Contains(key) || !matchTracker.IsNewMatch(key, match.Key))
+                    continue;
+
+                if (!ParticipatedIn(player, details))
+                    continue;
+
+                var result = matchService.BuildPerformance(player, details);
+                if (result is null)
+                    continue;
+
+                logger.LogInformation("Added {Key} to match {MatchId} from match details (not returned by own poll)",
+                    MatchTracker.PlayerKey(player.Name, player.Tag), match.Key);
+                results.Add(result);
+                present.Add(key);
+            }
+        }
+    }
+
+    private static bool ParticipatedIn(TrackedPlayer player, MatchDetailData details)
+    {
+        if (!string.IsNullOrEmpty(player.Puuid))
+            return details.Players.Any(p => string.Equals(p.Puuid, player.Puuid, StringComparison.OrdinalIgnoreCase));
+
+        if (string.IsNullOrWhiteSpace(player.Name) || string.IsNullOrWhiteSpace(player.Tag))
+            return false;
+
+        return details.Players.Any(p =>
+            p.Name.Equals(player.Name, StringComparison.OrdinalIgnoreCase) &&
+            p.Tag.Equals(player.Tag, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async Task<PerformanceResult?> GetNewMatchResultAsync(
+        TrackedPlayer player, IDictionary<string, MatchDetailData> detailsCache, CancellationToken ct)
+    {
+        using var scope = scopeFactory.CreateScope();
+        var matchService = scope.ServiceProvider.GetRequiredService<IMatchService>();
+
+        var result = await matchService.GetLatestPerformanceAsync(player, detailsCache, ct);
         if (result is null)
             return null;
 

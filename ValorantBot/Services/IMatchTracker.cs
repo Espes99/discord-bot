@@ -1,7 +1,7 @@
 namespace ValorantBot.Services;
 
 /// <summary>
-/// Tracks last-seen match IDs per player to detect new matches.
+/// Tracks recently seen match IDs per player to detect new matches.
 /// </summary>
 public interface IMatchTracker
 {
@@ -16,7 +16,7 @@ public interface IMatchTracker
     void SetLastMatch(string playerKey, string matchId);
 
     /// <summary>
-    /// Returns the last-seen match ID for the given player, or null if none tracked.
+    /// Returns the most recently recorded match ID for the given player, or null if none tracked.
     /// </summary>
     string? GetLastMatchId(string playerKey);
 
