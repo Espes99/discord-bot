@@ -750,7 +750,7 @@ public class Worker(
                     {
                         // Bot messages with the ranks-specific footer
                         var isRanksMessage = msg.Author.IsBot
-                            && msg.Embeds.Any(e => e.Footer?.Text == "Valorant Bot • Ranks");
+                            && msg.Embeds.Any(e => e.Footer?.Text == RanksFooter);
 
                         // Discord "pinned a message" system notifications
                         var isPinNotification = msg.Type == MessageType.ChannelPinnedMessage;
@@ -799,7 +799,7 @@ public class Worker(
             using var scope = scopeFactory.CreateScope();
             var henrikClient = scope.ServiceProvider.GetRequiredService<IHenrikDevClient>();
 
-            var rankEntries = new List<(TrackedPlayer Player, string Rank, int Rr, int RankOrder)>();
+            var rankEntries = new List<RankEntry>();
 
             foreach (var player in players)
             {
@@ -811,55 +811,24 @@ public class Worker(
                     if (mmr is not null && !string.IsNullOrEmpty(mmr.Current.Tier.Name))
                     {
                         var order = GetRankOrder(mmr.Current.Tier.Name);
-                        rankEntries.Add((player, mmr.Current.Tier.Name, mmr.Current.Rr, order));
+                        rankEntries.Add(new RankEntry(player, mmr.Current.Tier.Name, mmr.Current.Rr, order));
                     }
                     else
                     {
-                        rankEntries.Add((player, "Unranked", 0, 0));
+                        rankEntries.Add(new RankEntry(player, "Unranked", 0, 0));
                     }
                 }
                 catch (Exception ex)
                 {
                     logger.LogWarning(ex, "Failed to fetch MMR for {Name}#{Tag}", player.Name, player.Tag);
-                    rankEntries.Add((player, "Unknown", 0, -1));
+                    rankEntries.Add(new RankEntry(player, "Unknown", 0, -1));
                 }
 
                 await Task.Delay(TimeSpan.FromSeconds(2));
             }
 
             var sorted = rankEntries.OrderByDescending(e => e.RankOrder).ThenByDescending(e => e.Rr).ToList();
-
-            var embeds = new List<Embed>();
-            for (var i = 0; i < sorted.Count && i < 10; i++)
-            {
-                var entry = sorted[i];
-                var medal = i switch { 0 => "🥇", 1 => "🥈", 2 => "🥉", _ => $"#{i + 1}" };
-                var rrText = entry.RankOrder > 0 ? $"{entry.Rr} RR" : "";
-                var indicator = "";
-                if (entry.RankOrder > 0)
-                {
-                    if (entry.Rr >= 90)
-                        indicator = " 🟢";
-                    else if (entry.Rr <= 10)
-                        indicator = " 🚨";
-                }
-
-                var color = i switch { 0 => Color.Gold, 1 => new Color(192, 192, 192), 2 => new Color(205, 127, 50), _ => Color.LightGrey };
-                var description = entry.RankOrder > 0
-                    ? $"{entry.Rank} - {rrText}{indicator}"
-                    : entry.Rank;
-
-                var iconUrl = GetRankIconUrl(entry.Rank);
-                var embedBuilder = new EmbedBuilder()
-                    .WithAuthor($"{medal} {entry.Player.Name}#{entry.Player.Tag}", iconUrl: iconUrl)
-                    .WithDescription(description)
-                    .WithColor(color);
-
-                if (i == sorted.Count - 1 || i == 9)
-                    embedBuilder.WithFooter("Valorant Bot • Ranks").WithTimestamp(DateTimeOffset.UtcNow);
-
-                embeds.Add(embedBuilder.Build());
-            }
+            var embeds = BuildRanksEmbeds(sorted);
 
             var ranksMessage = await command.FollowupAsync(embeds: embeds.ToArray());
 
@@ -877,6 +846,81 @@ public class Worker(
             logger.LogError(ex, "Failed to handle /ranks command");
             await command.FollowupAsync("Failed to retrieve rank data.");
         }
+    }
+
+    private const int MaxIndividualRankEmbeds = 10;
+    private const int PodiumSize = 3;
+    private const int MaxFieldsPerEmbed = 25;
+    private const int MaxEmbedsPerMessage = 10;
+    private const int MaxCharsPerMessage = 6000;
+    private const string RanksFooter = "Valorant Bot • Ranks";
+
+    private record RankEntry(TrackedPlayer Player, string Rank, int Rr, int RankOrder);
+
+    /// <summary>
+    /// Up to 10 players get one embed each, as before. Beyond that Discord's embed limit forces a
+    /// compact layout: podium embeds for the top 3 and list embeds with one field per player for the rest.
+    /// </summary>
+    private List<Embed> BuildRanksEmbeds(List<RankEntry> sorted)
+    {
+        var builders = new List<EmbedBuilder>();
+
+        if (sorted.Count <= MaxIndividualRankEmbeds)
+        {
+            builders.AddRange(sorted.Select((e, i) => BuildIndividualRankEmbed(e, i)));
+        }
+        else
+        {
+            builders.AddRange(sorted.Take(PodiumSize).Select((e, i) => BuildIndividualRankEmbed(e, i)));
+
+            var position = PodiumSize;
+            foreach (var chunk in sorted.Skip(PodiumSize).Chunk(MaxFieldsPerEmbed))
+            {
+                if (builders.Count >= MaxEmbedsPerMessage)
+                {
+                    logger.LogWarning("Ranks list truncated at {Shown} of {Total} players (embed limit)", position, sorted.Count);
+                    break;
+                }
+
+                var list = new EmbedBuilder().WithColor(Color.LightGrey);
+                foreach (var entry in chunk)
+                {
+                    position++;
+                    list.AddField($"#{position} {entry.Player.Name}#{entry.Player.Tag}", RankDescription(entry), inline: false);
+                }
+                builders.Add(list);
+            }
+        }
+
+        // Discord counts characters across all embeds in one message
+        while (builders.Count > 1 && builders.Sum(b => b.Length) > MaxCharsPerMessage)
+        {
+            builders.RemoveAt(builders.Count - 1);
+            logger.LogWarning("Ranks list dropped an embed to stay under {Max} characters", MaxCharsPerMessage);
+        }
+
+        builders[^1].WithFooter(RanksFooter).WithTimestamp(DateTimeOffset.UtcNow);
+        return builders.Select(b => b.Build()).ToList();
+    }
+
+    private static EmbedBuilder BuildIndividualRankEmbed(RankEntry entry, int index)
+    {
+        var medal = index switch { 0 => "🥇", 1 => "🥈", 2 => "🥉", _ => $"#{index + 1}" };
+        var color = index switch { 0 => Color.Gold, 1 => new Color(192, 192, 192), 2 => new Color(205, 127, 50), _ => Color.LightGrey };
+
+        return new EmbedBuilder()
+            .WithAuthor($"{medal} {entry.Player.Name}#{entry.Player.Tag}", iconUrl: GetRankIconUrl(entry.Rank))
+            .WithDescription(RankDescription(entry))
+            .WithColor(color);
+    }
+
+    private static string RankDescription(RankEntry entry)
+    {
+        if (entry.RankOrder <= 0)
+            return entry.Rank;
+
+        var indicator = entry.Rr >= 90 ? " 🟢" : entry.Rr <= 10 ? " 🚨" : "";
+        return $"{entry.Rank} - {entry.Rr} RR{indicator}";
     }
 
     private static int GetRankOrder(string rank)
