@@ -50,6 +50,8 @@ builder.Services.AddSingleton<IPlayerProfileStore, PlayerProfileStore>();
 builder.Services.AddSingleton<ITrackedPlayerStore, TrackedPlayerStore>();
 builder.Services.AddSingleton<IPollStateStore, PollStateStore>();
 builder.Services.AddSingleton<IMessageHistoryStore, MessageHistoryStore>();
+builder.Services.AddSingleton<IRoastPlanStore, RoastPlanStore>();
+builder.Services.AddSingleton<RoastPlanner>();
 builder.Services.AddSingleton<IPerformanceAnalyzer, PerformanceAnalyzer>();
 builder.Services.AddSingleton<IMessageGenerator, MessageGenerator>();
 builder.Services.AddSingleton<IDiscordNotifier, DiscordNotifier>();

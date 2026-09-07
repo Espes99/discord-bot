@@ -26,8 +26,12 @@ Triggered on-demand via the `/latest-match` Discord slash command — no polling
 1. `Worker.HandleLatestMatchCommandAsync` iterates all tracked players from config
 2. `HenrikDevClient` fetches recent matches (v4 matchlist endpoint), then full match details (v4 match endpoint) from HenrikDev API
 3. `PerformanceAnalyzer.Analyze` scores the player on KDA, ACS, and HS% → produces a `PerformanceRating` (Terrible through Excellent)
-4. `MessageGenerator` sends stats to Claude Sonnet with a system prompt requesting toxic/funny messages; falls back to static `MessageTemplates` on API failure
-5. `DiscordNotifier` posts the AI message + a stats embed to the configured channel
+4. `HighlightExtractor` (called from `PerformanceAnalyzer`) pulls per-player stories out of rounds/kills (first deaths, aces, clutches, eco buys, AFK, ADR, standings)
+5. `RoastPlanner` picks, in code, what the message is about (one main focus, optional side focus), its form, voice, length, emoji budget, banned openers, and at most one profile allusion (bio or trait). Rotation is driven by `RoastPlanStore` (`roast_plans.json`), never by feeding old messages back to the model
+6. `MessageGenerator` renders the plan into a short prompt and calls Claude Sonnet; the system prompt is stable and cache-marked. Falls back to static text on API failure
+7. `DiscordNotifier` posts the AI message + a stats embed to the configured channel
+
+Stacks are grouped by `party_id` from the match details (team id as fallback). Squad messages assign roles (scapegoat, carry, ghost, footnote) that set how much text each player gets; everyone is named.
 
 **External APIs:**
 

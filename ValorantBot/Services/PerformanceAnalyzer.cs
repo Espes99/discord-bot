@@ -39,6 +39,11 @@ public class PerformanceAnalyzer(ILogger<PerformanceAnalyzer> logger) : IPerform
                 $"{matchPlayer.Name}#{matchPlayer.Tag}");
 
         var rating = Evaluate(stats.Kda, acs, stats.HeadshotPercentage, weaponContext, matchPlayer, logger);
+        var highlights = HighlightExtractor.Extract(matchData, matchPlayer);
+        if (highlights.Items.Count > 0)
+            logger.LogInformation("[Highlights] {Player}: {Highlights}",
+                $"{matchPlayer.Name}#{matchPlayer.Tag}",
+                string.Join(" | ", highlights.Items.Select(h => $"{h.Kind}({h.Severity}): {h.Text}")));
 
         return new PerformanceResult
         {
@@ -50,7 +55,8 @@ public class PerformanceAnalyzer(ILogger<PerformanceAnalyzer> logger) : IPerform
             MapName = matchData.Metadata.Map.Name,
             Score = score,
             Acs = acs,
-            WeaponContext = weaponContext
+            WeaponContext = weaponContext,
+            Highlights = highlights
         };
     }
 
