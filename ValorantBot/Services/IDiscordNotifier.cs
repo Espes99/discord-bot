@@ -44,6 +44,26 @@ public interface IDiscordNotifier : IAsyncDisposable
     event Func<SocketSlashCommand, Task>? OnAddTraitCommand;
 
     /// <summary>
+    /// Raised when a user invokes the /remove-trait slash command.
+    /// </summary>
+    event Func<SocketSlashCommand, Task>? OnRemoveTraitCommand;
+
+    /// <summary>
+    /// Raised when a user submits the trait select menu opened by /remove-trait.
+    /// </summary>
+    event Func<SocketMessageComponent, Task>? OnRemoveTraitMenu;
+
+    /// <summary>
+    /// Raised when a user invokes the /clear-profile slash command.
+    /// </summary>
+    event Func<SocketSlashCommand, Task>? OnClearProfileCommand;
+
+    /// <summary>
+    /// Raised when a user clicks Confirm or Cancel on the /clear-profile prompt.
+    /// </summary>
+    event Func<SocketMessageComponent, Task>? OnClearProfileButton;
+
+    /// <summary>
     /// Raised when a user invokes the /profile slash command.
     /// </summary>
     event Func<SocketSlashCommand, Task>? OnProfileCommand;

@@ -54,6 +54,10 @@ public class Worker(
         discord.OnRepairPlayerCommand += HandleRepairPlayerCommandAsync;
         discord.OnSetBioCommand += HandleSetBioCommandAsync;
         discord.OnAddTraitCommand += HandleAddTraitCommandAsync;
+        discord.OnRemoveTraitCommand += HandleRemoveTraitCommandAsync;
+        discord.OnRemoveTraitMenu += HandleRemoveTraitMenuAsync;
+        discord.OnClearProfileCommand += HandleClearProfileCommandAsync;
+        discord.OnClearProfileButton += HandleClearProfileButtonAsync;
         discord.OnProfileCommand += HandleProfileCommandAsync;
         discord.OnToggleProfileCommand += HandleToggleProfileCommandAsync;
         discord.OnSummaryCommand += HandleSummaryCommandAsync;
@@ -433,8 +437,14 @@ public class Worker(
         }
     }
 
-    private bool IsAuthorized(SocketSlashCommand command) =>
-        botAdminOptions.Value.AllowedUserIds.Contains(command.User.Id);
+    private bool IsAuthorized(SocketInteraction interaction) =>
+        botAdminOptions.Value.AllowedUserIds.Contains(interaction.User.Id);
+
+    private string ResolveDisplayName(string storeKey)
+    {
+        var tracked = trackedPlayerStore.FindByPuuid(storeKey);
+        return tracked is not null ? $"{tracked.Name}#{tracked.Tag}" : storeKey;
+    }
 
     private async Task HandleTrackCommandAsync(SocketSlashCommand command)
     {
@@ -973,6 +983,159 @@ public class Worker(
         logger.LogInformation("{User} added trait for {Name}#{Tag}: {Trait}",
             command.User.Username, name, tag, trait);
         await command.FollowupAsync($"Trait added for **{name}#{tag}**: \"{trait}\"", ephemeral: true);
+    }
+
+    private async Task HandleRemoveTraitCommandAsync(SocketSlashCommand command)
+    {
+        await command.DeferAsync(ephemeral: true);
+
+        if (!IsAuthorized(command))
+        {
+            await command.FollowupAsync("You don't have permission to use this command.", ephemeral: true);
+            return;
+        }
+
+        var name = command.Data.Options.First(o => o.Name == "name").Value.ToString()!;
+        var tag = command.Data.Options.First(o => o.Name == "tag").Value.ToString()!;
+
+        var tracked = ResolveTrackedPlayer(name, tag);
+        var key = tracked is not null ? StoreKey(tracked) : MatchTracker.PlayerKey(name, tag);
+        var profile = playerProfileStore.GetProfile(key);
+
+        if (profile is null || profile.ManualTraits.Count == 0)
+        {
+            await command.FollowupAsync($"No manual traits to remove for **{name}#{tag}**.", ephemeral: true);
+            return;
+        }
+
+        // Discord caps select menus at 25 options and labels at 100 chars
+        const int maxOptions = 25;
+        const int maxLabelLength = 100;
+        var shown = profile.ManualTraits.Take(maxOptions).ToList();
+
+        var menu = new SelectMenuBuilder()
+            .WithCustomId(DiscordNotifier.RemoveTraitMenuPrefix + key)
+            .WithPlaceholder("Select traits to remove")
+            .WithMinValues(1)
+            .WithMaxValues(shown.Count);
+
+        for (var i = 0; i < shown.Count; i++)
+        {
+            var label = shown[i].Length > maxLabelLength ? shown[i][..(maxLabelLength - 1)] + "…" : shown[i];
+            menu.AddOption(label, i.ToString());
+        }
+
+        var text = $"Select manual traits to remove from **{name}#{tag}**:";
+        if (profile.ManualTraits.Count > maxOptions)
+            text += $"\nShowing the first {maxOptions} of {profile.ManualTraits.Count}. Run the command again for the rest.";
+
+        await command.FollowupAsync(text, components: new ComponentBuilder().WithSelectMenu(menu).Build(), ephemeral: true);
+    }
+
+    private async Task HandleRemoveTraitMenuAsync(SocketMessageComponent component)
+    {
+        if (!IsAuthorized(component))
+        {
+            await component.RespondAsync("You don't have permission to do this.", ephemeral: true);
+            return;
+        }
+
+        var key = component.Data.CustomId[DiscordNotifier.RemoveTraitMenuPrefix.Length..];
+        var indices = component.Data.Values
+            .Select(v => int.TryParse(v, out var i) ? i : -1)
+            .Where(i => i >= 0)
+            .ToList();
+
+        var removed = playerProfileStore.RemoveManualTraitsAt(key, indices);
+        var displayName = ResolveDisplayName(key);
+
+        logger.LogInformation("{User} removed {Count} trait(s) for {Player}: {Traits}",
+            component.User.Username, removed.Count, displayName, string.Join(" | ", removed));
+
+        var text = removed.Count == 0
+            ? $"No traits were removed for **{displayName}** (the list may have changed)."
+            : $"Removed {removed.Count} trait(s) for **{displayName}**:\n{string.Join("\n", removed.Select(t => $"- {t}"))}";
+
+        await component.UpdateAsync(msg =>
+        {
+            msg.Content = text;
+            msg.Components = new ComponentBuilder().Build();
+        });
+    }
+
+    private async Task HandleClearProfileCommandAsync(SocketSlashCommand command)
+    {
+        await command.DeferAsync(ephemeral: true);
+
+        if (!IsAuthorized(command))
+        {
+            await command.FollowupAsync("You don't have permission to use this command.", ephemeral: true);
+            return;
+        }
+
+        var name = command.Data.Options.First(o => o.Name == "name").Value.ToString()!;
+        var tag = command.Data.Options.First(o => o.Name == "tag").Value.ToString()!;
+
+        var tracked = ResolveTrackedPlayer(name, tag);
+        var key = tracked is not null ? StoreKey(tracked) : MatchTracker.PlayerKey(name, tag);
+        var profile = playerProfileStore.GetProfile(key);
+
+        if (profile is null || (string.IsNullOrWhiteSpace(profile.Bio) && profile.ManualTraits.Count == 0))
+        {
+            await command.FollowupAsync($"Nothing to clear for **{name}#{tag}**.", ephemeral: true);
+            return;
+        }
+
+        var summary = new List<string>();
+        if (!string.IsNullOrWhiteSpace(profile.Bio))
+            summary.Add($"- Bio: \"{profile.Bio}\"");
+        if (profile.ManualTraits.Count > 0)
+            summary.Add($"- {profile.ManualTraits.Count} manual trait(s)");
+
+        var text = $"Clear profile for **{name}#{tag}**? This removes:\n{string.Join("\n", summary)}\nAuto traits are kept.";
+
+        var buttons = new ComponentBuilder()
+            .WithButton("Confirm", DiscordNotifier.ClearProfileConfirmPrefix + key, ButtonStyle.Danger)
+            .WithButton("Cancel", DiscordNotifier.ClearProfileCancelId, ButtonStyle.Secondary)
+            .Build();
+
+        await command.FollowupAsync(text, components: buttons, ephemeral: true);
+    }
+
+    private async Task HandleClearProfileButtonAsync(SocketMessageComponent component)
+    {
+        if (!IsAuthorized(component))
+        {
+            await component.RespondAsync("You don't have permission to do this.", ephemeral: true);
+            return;
+        }
+
+        var customId = component.Data.CustomId;
+        string text;
+
+        if (customId == DiscordNotifier.ClearProfileCancelId)
+        {
+            text = "Cancelled. Profile unchanged.";
+        }
+        else
+        {
+            var key = customId[DiscordNotifier.ClearProfileConfirmPrefix.Length..];
+            var displayName = ResolveDisplayName(key);
+            var cleared = playerProfileStore.ClearBioAndManualTraits(key);
+
+            logger.LogInformation("{User} cleared profile for {Player} (cleared: {Cleared})",
+                component.User.Username, displayName, cleared);
+
+            text = cleared
+                ? $"Cleared bio and manual traits for **{displayName}**. Auto traits are kept."
+                : $"No profile found for **{displayName}**.";
+        }
+
+        await component.UpdateAsync(msg =>
+        {
+            msg.Content = text;
+            msg.Components = new ComponentBuilder().Build();
+        });
     }
 
     private async Task HandleProfileCommandAsync(SocketSlashCommand command)

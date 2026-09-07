@@ -75,6 +75,8 @@ Each player gets a color-coded stats card with agent, score, KDA, ACS, and HS%. 
 | `/ranks`                          | Ranked leaderboard for all tracked players, sorted by tier and RR. Shows promotion/demotion indicators.                                           |
 | `/set-bio <name> <tag> <bio>`     | Set a free-text roast bio for a player (admin only). Used by the AI to personalize messages.                                                      |
 | `/add-trait <name> <tag> <trait>` | Add a manual roast trait to a player (admin only). e.g. "always blames teammates".                                                                |
+| `/remove-trait <name> <tag>`      | Remove one or more manual traits from a player via a select menu (admin only). Auto traits are not affected.                                     |
+| `/clear-profile <name> <tag>`     | Clear a player's bio and manual traits after confirmation (admin only). Auto traits are kept.                                                    |
 | `/profile <name> <tag>`           | View a player's roast profile (bio, manual traits, auto traits). Access can be toggled by admins.                                                 |
 | `/toggle-profile`                 | Toggle whether non-admins can use `/profile` (admin only). Defaults to enabled.                                                                   |
 
@@ -102,7 +104,7 @@ cp ValorantBot/appsettings.example.json ValorantBot/appsettings.json
 | `HenrikDevValorantApi.ApiKey` | HenrikDev API key                                                                                                           |
 | `Anthropic.ApiKey`            | Anthropic API key                                                                                                           |
 | `Polling.IntervalSeconds`     | Polling interval in seconds (default: 1200)                                                                                 |
-| `BotAdmin.AllowedUserIds`     | Array of Discord user IDs allowed to use admin commands (`/track`, `/untrack`, `/set-bio`, `/add-trait`, `/toggle-profile`) |
+| `BotAdmin.AllowedUserIds`     | Array of Discord user IDs allowed to use admin commands (`/track`, `/untrack`, `/set-bio`, `/add-trait`, `/remove-trait`, `/clear-profile`, `/toggle-profile`) |
 
 ## Data Persistence
 
