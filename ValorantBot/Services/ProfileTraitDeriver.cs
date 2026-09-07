@@ -46,6 +46,9 @@ public static class ProfileTraitDeriver
         ["Vyse"] = "Sentinel",
     };
 
+    public static string? RoleOf(string agent) =>
+        AgentRoles.TryGetValue(agent, out var role) ? role : null;
+
     public static List<string> DeriveTraits(List<MatchHistoryEntry> history, PlayerHistorySummary? summary)
     {
         var traits = new List<string>();

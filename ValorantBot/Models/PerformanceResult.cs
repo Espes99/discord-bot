@@ -22,4 +22,6 @@ public class PerformanceResult
     public required double Acs { get; init; }
 
     public WeaponContext? WeaponContext { get; init; }
+
+    public MatchHighlights Highlights { get; init; } = MatchHighlights.Empty;
 }

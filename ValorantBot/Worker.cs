@@ -176,9 +176,9 @@ public class Worker(
 
         newResults = newResults.OrderBy(r => r.MatchData.Metadata.StartedAt).ToList();
 
-        // Group by match + team to detect stacks
+        // Party id is exact stack membership; team id is the fallback when the API omits it
         var squads = newResults
-            .GroupBy(r => (MatchId: r.MatchData.Metadata.MatchId, TeamId: r.MatchPlayer.TeamId))
+            .GroupBy(r => (MatchId: r.MatchData.Metadata.MatchId, Group: PartyOrTeam(r.MatchPlayer)))
             .ToList();
 
         var squadResults = new HashSet<PerformanceResult>(
@@ -260,6 +260,9 @@ public class Worker(
             }
         }
     }
+
+    private static string PartyOrTeam(MatchPlayer p) =>
+        string.IsNullOrEmpty(p.PartyId) ? $"team:{p.TeamId}" : $"party:{p.PartyId}";
 
     private RankChangeInfo? DetectRankChange(string? matchStartRank, string? currentRank, string displayKey)
     {
