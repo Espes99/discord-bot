@@ -42,6 +42,18 @@ public class DiscordNotifier : IDiscordNotifier
     public event Func<SocketSlashCommand, Task>? OnAddTraitCommand;
 
     /// <inheritdoc />
+    public event Func<SocketSlashCommand, Task>? OnRemoveTraitCommand;
+
+    /// <inheritdoc />
+    public event Func<SocketMessageComponent, Task>? OnRemoveTraitMenu;
+
+    /// <inheritdoc />
+    public event Func<SocketSlashCommand, Task>? OnClearProfileCommand;
+
+    /// <inheritdoc />
+    public event Func<SocketMessageComponent, Task>? OnClearProfileButton;
+
+    /// <inheritdoc />
     public event Func<SocketSlashCommand, Task>? OnProfileCommand;
 
     /// <inheritdoc />
@@ -56,6 +68,10 @@ public class DiscordNotifier : IDiscordNotifier
     private readonly IMatchHistoryStore _historyStore;
 
     private const int MaxMessageLength = 2000;
+
+    public const string RemoveTraitMenuPrefix = "remove-trait:";
+    public const string ClearProfileConfirmPrefix = "clear-profile:confirm:";
+    public const string ClearProfileCancelId = "clear-profile:cancel";
 
     private static List<string> SplitMessage(string message)
     {
@@ -109,6 +125,8 @@ public class DiscordNotifier : IDiscordNotifier
 
         _client.Ready += OnReadyAsync;
         _client.SlashCommandExecuted += OnSlashCommandExecutedAsync;
+        _client.SelectMenuExecuted += OnComponentExecutedAsync;
+        _client.ButtonExecuted += OnComponentExecutedAsync;
     }
 
     private async Task OnReadyAsync()
@@ -163,6 +181,18 @@ public class DiscordNotifier : IDiscordNotifier
             .AddOption("tag", ApplicationCommandOptionType.String, "Player tag (e.g. 1234)", isRequired: true)
             .AddOption("trait", ApplicationCommandOptionType.String, "Trait to add (e.g. \"always blames teammates\")", isRequired: true);
 
+        var removeTraitCommand = new SlashCommandBuilder()
+            .WithName("remove-trait")
+            .WithDescription("Remove one or more manual traits from a player (admin only)")
+            .AddOption("name", ApplicationCommandOptionType.String, "Player name", isRequired: true)
+            .AddOption("tag", ApplicationCommandOptionType.String, "Player tag (e.g. 1234)", isRequired: true);
+
+        var clearProfileCommand = new SlashCommandBuilder()
+            .WithName("clear-profile")
+            .WithDescription("Clear a player's bio and manual traits (admin only)")
+            .AddOption("name", ApplicationCommandOptionType.String, "Player name", isRequired: true)
+            .AddOption("tag", ApplicationCommandOptionType.String, "Player tag (e.g. 1234)", isRequired: true);
+
         var profileCommand = new SlashCommandBuilder()
             .WithName("profile")
             .WithDescription("View a player's roast profile")
@@ -201,6 +231,8 @@ public class DiscordNotifier : IDiscordNotifier
             repairPlayerCommand.Build(),
             setBioCommand.Build(),
             addTraitCommand.Build(),
+            removeTraitCommand.Build(),
+            clearProfileCommand.Build(),
             profileCommand.Build(),
             toggleProfileCommand.Build(),
             summaryCommand.Build(),
@@ -272,6 +304,20 @@ public class DiscordNotifier : IDiscordNotifier
                     await command.RespondAsync("Bot is not fully initialized yet.");
                 break;
 
+            case "remove-trait":
+                if (OnRemoveTraitCommand is not null)
+                    await OnRemoveTraitCommand.Invoke(command);
+                else
+                    await command.RespondAsync("Bot is not fully initialized yet.");
+                break;
+
+            case "clear-profile":
+                if (OnClearProfileCommand is not null)
+                    await OnClearProfileCommand.Invoke(command);
+                else
+                    await command.RespondAsync("Bot is not fully initialized yet.");
+                break;
+
             case "profile":
                 if (OnProfileCommand is not null)
                     await OnProfileCommand.Invoke(command);
@@ -300,6 +346,32 @@ public class DiscordNotifier : IDiscordNotifier
                     await command.RespondAsync("Bot is not fully initialized yet.");
                 break;
         }
+    }
+
+    private async Task OnComponentExecutedAsync(SocketMessageComponent component)
+    {
+        var customId = component.Data.CustomId;
+
+        if (customId.StartsWith(RemoveTraitMenuPrefix, StringComparison.Ordinal))
+        {
+            if (OnRemoveTraitMenu is not null)
+                await OnRemoveTraitMenu.Invoke(component);
+            else
+                await component.DeferAsync();
+            return;
+        }
+
+        if (customId.StartsWith(ClearProfileConfirmPrefix, StringComparison.Ordinal) || customId == ClearProfileCancelId)
+        {
+            if (OnClearProfileButton is not null)
+                await OnClearProfileButton.Invoke(component);
+            else
+                await component.DeferAsync();
+            return;
+        }
+
+        _logger.LogWarning("Unhandled component interaction: {CustomId}", customId);
+        await component.DeferAsync();
     }
 
     /// <inheritdoc />

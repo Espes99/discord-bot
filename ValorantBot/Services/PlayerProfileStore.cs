@@ -81,6 +81,49 @@ public class PlayerProfileStore : IPlayerProfileStore
         }
     }
 
+    public IReadOnlyList<string> RemoveManualTraitsAt(string playerKey, IReadOnlyCollection<int> indices)
+    {
+        lock (_lock)
+        {
+            if (!_profiles.TryGetValue(playerKey.ToLowerInvariant(), out var profile))
+                return [];
+
+            // Descending order so earlier removals don't shift the remaining indices
+            var valid = indices
+                .Where(i => i >= 0 && i < profile.ManualTraits.Count)
+                .Distinct()
+                .OrderDescending()
+                .ToList();
+
+            var removed = new List<string>();
+            foreach (var index in valid)
+            {
+                removed.Add(profile.ManualTraits[index]);
+                profile.ManualTraits.RemoveAt(index);
+            }
+
+            if (removed.Count > 0)
+                Save();
+
+            removed.Reverse();
+            return removed;
+        }
+    }
+
+    public bool ClearBioAndManualTraits(string playerKey)
+    {
+        lock (_lock)
+        {
+            if (!_profiles.TryGetValue(playerKey.ToLowerInvariant(), out var profile))
+                return false;
+
+            profile.Bio = null;
+            profile.ManualTraits.Clear();
+            Save();
+            return true;
+        }
+    }
+
     public void UpdateAutoTraits(string playerKey, List<string> traits)
     {
         lock (_lock)
