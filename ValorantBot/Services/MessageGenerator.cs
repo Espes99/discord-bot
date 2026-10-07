@@ -239,6 +239,10 @@ public class MessageGenerator(
         _ => "at most two"
     };
 
+    // Sonnet 5.5 has adaptive thinking on by default (effort high), and thinking tokens count toward max_tokens.
+    // Callers pass the budget for the message text; this headroom is added on top for thinking.
+    private const int ThinkingTokenHeadroom = 4000;
+
     private async Task<string?> CallClaudeAsync(string systemPrompt, string userPrompt, int maxTokens)
     {
         logger.LogDebug("Prompt:\n{Prompt}", userPrompt);
@@ -246,7 +250,7 @@ public class MessageGenerator(
         var parameters = new MessageParameters
         {
             Model = "claude-sonnet-5-5",
-            MaxTokens = maxTokens,
+            MaxTokens = maxTokens + ThinkingTokenHeadroom,
             Temperature = 1.0m,
             System = [new SystemMessage(systemPrompt) { CacheControl = new CacheControl { Type = CacheControlType.ephemeral } }],
             Messages = [new Message(RoleType.User, userPrompt)]
@@ -258,7 +262,12 @@ public class MessageGenerator(
             try
             {
                 var response = await client.Messages.GetClaudeMessageAsync(parameters);
-                return response.Content.FirstOrDefault()?.ToString()?.Trim();
+                if (response.StopReason == "max_tokens")
+                    logger.LogWarning("Claude response hit max_tokens ({MaxTokens}), message may be truncated", parameters.MaxTokens);
+
+                // Thinking blocks precede the text, so only use text content
+                var text = string.Concat(response.Content.OfType<TextContent>().Select(c => c.Text)).Trim();
+                return string.IsNullOrEmpty(text) ? null : text;
             }
             catch (HttpRequestException) when (attempt < maxRetries)
             {
