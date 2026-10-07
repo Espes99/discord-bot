@@ -35,6 +35,9 @@ public enum SquadRole
 /// <summary>One thing the message is allowed to be about. Kind is used for rotation, Text goes into the prompt.</summary>
 public record RoastFocus(string Kind, string Text, int Weight);
 
+/// <summary>A bio line or trait picked as roast material, with the joke angles it was already used for.</summary>
+public record RoastAllusion(string Text, List<string> PreviousAngles);
+
 public class RoastPlan
 {
     public required string Voice { get; init; }
@@ -43,7 +46,7 @@ public class RoastPlan
     public required int EmojiBudget { get; init; }
     public required RoastFocus MainFocus { get; init; }
     public RoastFocus? SideFocus { get; init; }
-    public string? Allusion { get; init; }
+    public RoastAllusion? Allusion { get; init; }
     public required List<string> BannedOpeners { get; init; }
 }
 
@@ -64,8 +67,9 @@ public class SquadRoastPlan
     public required int MaxSentences { get; init; }
     public required int EmojiBudget { get; init; }
     public required List<SquadMemberPlan> Members { get; init; }
-    public string? Allusion { get; init; }
+    public RoastAllusion? Allusion { get; init; }
     public string? AllusionOwner { get; init; }
+    public string? AllusionOwnerKey { get; init; }
     public required List<string> BannedOpeners { get; init; }
 }
 
@@ -87,5 +91,14 @@ public class SquadPlanRecord
     public string? Voice { get; init; }
     public string? Form { get; init; }
     public Dictionary<string, string> Roles { get; init; } = new();
+    public string? AllusionOwnerKey { get; init; }
     public string? Opener { get; init; }
+}
+
+/// <summary>One time a bio line or trait made it into a message. Kept longer than plan records so cooldowns can span days.</summary>
+public class TraitUseRecord
+{
+    public DateTime At { get; init; }
+    public required string Trait { get; init; }
+    public string? Angle { get; init; }
 }
