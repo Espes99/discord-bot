@@ -3,8 +3,9 @@ using ValorantBot.Models;
 namespace ValorantBot.Services;
 
 /// <summary>
-/// Decides, in code, what a roast is about and what shape it takes. The model only ever sees the
-/// chosen focus, form and (at most) one background allusion, so it cannot fall back on listing everything.
+/// Gathers the material for a roast in code: which stories are true for the match, which bio line or trait
+/// to use, who plays which squad role, and what was used recently. The model chooses story, tone and form
+/// from that material; the recent lists are how it avoids repeating itself.
 /// </summary>
 public class RoastPlanner(IRoastPlanStore planStore, IPlayerProfileStore profileStore)
 {
@@ -15,12 +16,17 @@ public class RoastPlanner(IRoastPlanStore planStore, IPlayerProfileStore profile
     private const int RecentFocusWindow = 2;
     private const int RecentOpenerWindow = 3;
 
+    private const int SoloStories = 6;
+    private const int SquadMemberStories = 3;
+    private const int ToneIdeaCount = 6;
+
     private const double SoloAllusionChance = 0.6;
     private const double SquadAllusionChance = 0.7;
     // A small group with few traits plays several games a day, so cooldown is measured in time, not messages
     private static readonly TimeSpan TraitCooldown = TimeSpan.FromDays(3);
     private const int PreviousAnglesShown = 5;
 
+    // Inspiration only: a few are shown per message and the model may pick one or invent its own
     private static readonly string[] Voices =
     [
         "disappointed coach at a post-game press conference",
@@ -78,54 +84,31 @@ public class RoastPlanner(IRoastPlanStore planStore, IPlayerProfileStore profile
         "the player's name", "Alright", "Ladies and gentlemen", "Case file", "Well well", "Ah", "Oh", "So"
     ];
 
-    // Below this weight a candidate is a side note, not a story
-    private const int MainFocusMinWeight = 5;
-
     public RoastPlan PlanSolo(PerformanceResult result, PlayerHistorySummary? history, RankChangeInfo? rankChange, string storeKey)
     {
         var records = planStore.GetPlayerRecords(storeKey);
-        var candidates = FocusCandidates.Build(result, history, rankChange);
-
-        var recentFocus = records.TakeLast(RecentFocusWindow).Select(r => r.FocusKind).ToHashSet();
-        var mainPool = candidates.Where(c => c.Weight >= MainFocusMinWeight).ToList();
-        if (mainPool.Count == 0)
-            mainPool = candidates;
-        var main = rankChange is not null
-            ? candidates.First(c => c.Kind == "RankChange")
-            : PickWeighted(mainPool, c => recentFocus.Contains(c.Kind) ? c.Weight / 4.0 : c.Weight);
-
-        RoastFocus? side = null;
-        if (Rng.NextDouble() < 0.55)
-        {
-            var sideCandidates = candidates.Where(c => c.Kind != main.Kind && c.Kind != "RankChange").ToList();
-            if (sideCandidates.Count > 0)
-                side = PickWeighted(sideCandidates, c => recentFocus.Contains(c.Kind) ? c.Weight / 4.0 : c.Weight);
-        }
-
         var solo = records.Where(r => r.Source == "solo").ToList();
-        var form = PickExcluding(Enum.GetValues<RoastForm>(), solo.TakeLast(RecentFormWindow).Select(r => r.Form));
-        var voice = PickExcluding(Voices, solo.TakeLast(RecentVoiceWindow).Select(r => r.Voice));
-
-        var sentences = form switch
-        {
-            RoastForm.OneLiner => 1,
-            RoastForm.SetupAndPunchline or RoastForm.FakeQuote => 2,
-            RoastForm.ListOfThree => 3,
-            _ => Rng.Next(1, 4)
-        };
-        if (rankChange is not null && sentences < 2)
-            sentences = 2;
+        var stories = FocusCandidates.Build(result, history, rankChange)
+            .OrderByDescending(c => c.Weight)
+            .Take(SoloStories)
+            .ToList();
+        var recentTones = solo.TakeLast(RecentVoiceWindow).Select(r => r.Voice).ToList();
 
         return new RoastPlan
         {
-            Voice = voice,
-            Form = form,
-            Sentences = sentences,
-            EmojiBudget = Rng.Next(0, 3),
-            MainFocus = main,
-            SideFocus = side,
+            Stories = stories,
+            RequiredStory = rankChange is not null ? stories.First(c => c.Kind == "RankChange") : null,
+            ToneIdeas = ToneIdeas(ToneIdeaCount, recentTones),
+            MinSentences = rankChange is not null ? 2 : 1,
+            MaxSentences = 3,
             Allusion = Rng.NextDouble() < SoloAllusionChance ? PickAllusion(storeKey) : null,
-            BannedOpeners = BannedOpeners(records.Select(r => r.Opener), result.MatchPlayer.Name)
+            Recent = new RecentChoices
+            {
+                Stories = Distinct(records.TakeLast(RecentFocusWindow).Select(r => r.FocusKind)),
+                Tones = Distinct(recentTones),
+                Forms = Distinct(solo.TakeLast(RecentFormWindow).Select(r => r.Form)),
+                BannedOpeners = BannedOpeners(records.Select(r => r.Opener), result.MatchPlayer.Name)
+            }
         };
     }
 
@@ -147,25 +130,21 @@ public class RoastPlanner(IRoastPlanStore planStore, IPlayerProfileStore profile
             histories?.TryGetValue(key, out h);
             RankChangeInfo? rc = null;
             rankChanges?.TryGetValue(key, out rc);
-            var candidates = FocusCandidates.Build(r, h, rc);
             var role = roles[key];
-            // Squad members get one line each, so the focus should be their strongest story, with a little variety
-            var top = candidates.OrderByDescending(c => c.Weight).Take(2).ToList();
-            RoastFocus? focus = role == SquadRole.Footnote
-                ? null
-                : rc is not null ? candidates.First(c => c.Kind == "RankChange") : PickWeighted(top, c => c.Weight);
+            // Footnotes get a few words, so one story is plenty
+            var stories = FocusCandidates.Build(r, h, rc)
+                .OrderByDescending(c => c.Weight)
+                .Take(role == SquadRole.Footnote ? 1 : SquadMemberStories)
+                .ToList();
             return new SquadMemberPlan
             {
                 StoreKey = key,
                 DisplayName = $"{r.MatchPlayer.Name}#{r.MatchPlayer.Tag}",
                 Agent = r.MatchPlayer.Agent.Name,
                 Role = role,
-                Focus = focus
+                Stories = stories
             };
         }).ToList();
-
-        var form = PickExcluding(Enum.GetValues<SquadForm>(), records.TakeLast(RecentFormWindow).Select(r => r.Form));
-        var voice = PickExcluding(Voices, records.TakeLast(RecentVoiceWindow).Select(r => r.Voice));
 
         RoastAllusion? allusion = null;
         SquadMemberPlan? owner = null;
@@ -192,50 +171,54 @@ public class RoastPlanner(IRoastPlanStore planStore, IPlayerProfileStore profile
             3 => (3, 5),
             _ => (4, 6)
         };
+        var recentTones = records.TakeLast(RecentVoiceWindow).Select(r => r.Voice).ToList();
 
         return new SquadRoastPlan
         {
-            Voice = voice,
-            Form = form,
+            Members = members,
+            ToneIdeas = ToneIdeas(ToneIdeaCount, recentTones),
             MinSentences = min,
             MaxSentences = max,
-            EmojiBudget = Rng.Next(0, 3),
-            Members = members,
             Allusion = allusion,
             AllusionOwner = owner?.DisplayName,
             AllusionOwnerKey = owner?.StoreKey,
-            BannedOpeners = BannedOpeners(records.Select(r => r.Opener), null)
+            Recent = new RecentChoices
+            {
+                Tones = Distinct(recentTones),
+                Forms = Distinct(records.TakeLast(RecentFormWindow).Select(r => r.Form)),
+                BannedOpeners = BannedOpeners(records.Select(r => r.Opener), null)
+            }
         };
     }
 
-    public void RecordSolo(string storeKey, RoastPlan plan, string message, string? angle)
+    public void RecordSolo(string storeKey, RoastPlan plan, RoastChoice choice)
     {
         planStore.AddPlayerRecord(storeKey, new RoastPlanRecord
         {
             At = DateTime.UtcNow,
             Source = "solo",
-            Voice = plan.Voice,
-            Form = plan.Form.ToString(),
-            FocusKind = plan.MainFocus.Kind,
+            Voice = choice.Tone,
+            Form = choice.Form,
+            FocusKind = choice.Story,
             Allusion = plan.Allusion?.Text,
-            Opener = Opener(message)
+            Opener = Opener(choice.Message)
         });
 
         if (plan.Allusion is not null)
-            planStore.AddTraitUse(storeKey, new TraitUseRecord { At = DateTime.UtcNow, Trait = plan.Allusion.Text, Angle = angle });
+            planStore.AddTraitUse(storeKey, new TraitUseRecord { At = DateTime.UtcNow, Trait = plan.Allusion.Text, Angle = NullIfBlank(choice.Angle) });
     }
 
-    public void RecordSquad(SquadRoastPlan plan, string message, string? angle)
+    public void RecordSquad(SquadRoastPlan plan, RoastChoice choice)
     {
         var squadKey = RoastPlanStore.SquadKey(plan.Members.Select(m => m.StoreKey));
         planStore.AddSquadRecord(squadKey, new SquadPlanRecord
         {
             At = DateTime.UtcNow,
-            Voice = plan.Voice,
-            Form = plan.Form.ToString(),
+            Voice = choice.Tone,
+            Form = choice.Form,
             Roles = plan.Members.ToDictionary(m => m.StoreKey, m => m.Role.ToString()),
             AllusionOwnerKey = plan.AllusionOwnerKey,
-            Opener = Opener(message)
+            Opener = Opener(choice.Message)
         });
 
         foreach (var member in plan.Members)
@@ -245,18 +228,23 @@ public class RoastPlanner(IRoastPlanStore planStore, IPlayerProfileStore profile
             {
                 At = DateTime.UtcNow,
                 Source = "squad",
-                FocusKind = member.Focus?.Kind,
                 Allusion = usedAllusion
             });
         }
 
         if (plan.Allusion is not null && plan.AllusionOwnerKey is not null)
-            planStore.AddTraitUse(plan.AllusionOwnerKey, new TraitUseRecord { At = DateTime.UtcNow, Trait = plan.Allusion.Text, Angle = angle });
+            planStore.AddTraitUse(plan.AllusionOwnerKey, new TraitUseRecord { At = DateTime.UtcNow, Trait = plan.Allusion.Text, Angle = NullIfBlank(choice.Angle) });
     }
 
-    public static string RandomVoice() => Voices[Rng.Next(Voices.Length)];
-    public static string FormDirective(RoastForm form) => FormDirectives[form];
-    public static string SquadFormDirective(SquadForm form) => SquadFormDirectives[form];
+    /// <summary>A shuffled handful of voices, skipping recently used ones, as inspiration for the model.</summary>
+    public static List<string> ToneIdeas(int count, IEnumerable<string?>? recent = null)
+    {
+        var exclude = (recent ?? []).Where(r => r is not null).Select(r => r!).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return Voices.Where(v => !exclude.Contains(v)).OrderBy(_ => Rng.Next()).Take(count).ToList();
+    }
+
+    public static IEnumerable<string> FormMenu => FormDirectives.Select(kv => $"{kv.Key}: {kv.Value}");
+    public static IEnumerable<string> SquadFormMenu => SquadFormDirectives.Select(kv => $"{kv.Key}: {kv.Value}");
 
     private Dictionary<string, SquadRole> AssignRoles(List<PerformanceResult> results, List<string> keys, List<SquadPlanRecord> records)
     {
@@ -357,14 +345,10 @@ public class RoastPlanner(IRoastPlanStore planStore, IPlayerProfileStore profile
         return string.Join(' ', words);
     }
 
-    private static T PickExcluding<T>(IReadOnlyList<T> options, IEnumerable<string?> recent) where T : notnull
-    {
-        var exclude = recent.Where(r => r is not null).Select(r => r!).ToHashSet(StringComparer.Ordinal);
-        var pool = options.Where(o => !exclude.Contains(o.ToString()!)).ToList();
-        if (pool.Count == 0)
-            pool = options.ToList();
-        return pool[Rng.Next(pool.Count)];
-    }
+    private static List<string> Distinct(IEnumerable<string?> values) =>
+        values.Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v!).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+    private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static T PickWeighted<T>(IReadOnlyList<T> options, Func<T, double> weightOf)
     {
