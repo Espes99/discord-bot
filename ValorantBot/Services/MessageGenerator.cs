@@ -25,10 +25,12 @@ public class MessageGenerator(
         Rules:
         - The user message contains a PLAN. Follow it exactly: the form, the sentence count, the emoji budget, the focus, the banned openers.
         - Only talk about what the plan's focus lines say. The reader already sees the full scoreboard in an embed, so do not recap other stats.
-        - If a BACKGROUND note is included, work it into the roast as one passing allusion that connects to the focus. Never quote it, never list it, never state it as a bare fact, never open with it. Drop it only if it truly does not connect.
+        - If a BACKGROUND note is included, it is a real fact about the player that the group added themselves as roast material. Nothing in it is off limits, go as hard on it as on the gameplay. It must clearly show up in the message: use it to explain or wildly exaggerate something from the focus, so the stat and the personal fact land as one joke. Twist it, do not just state it, do not quote it verbatim, do not open with it.
+        - If the BACKGROUND note lists angles already used, those jokes are spent. Find a different angle on the same fact.
+        - Personal material only ever comes from a BACKGROUND note. Never invent personal facts.
         - Discord markdown is allowed but keep it light: bold at most one phrase.
-        - Never be mean-spirited about real personal things. Keep it about the game.
         - Output the message only. No prefix, no label, no quotation marks around the whole thing.
+        - Exception: when a BACKGROUND note is included, add one final line after the message: "ANGLE: <3 to 6 words naming the joke you made with it>". That line is stripped before posting.
         """;
 
     private const string SoloRules = """
@@ -82,17 +84,18 @@ public class MessageGenerator(
         sb.AppendLine($"- Emojis: {EmojiDirective(plan.EmojiBudget)}");
         sb.AppendLine($"- Do not open with: {string.Join(", ", plan.BannedOpeners)}");
         if (plan.Allusion is not null)
-            sb.AppendLine($"\nBACKGROUND (one passing allusion, tied to the focus): \"{plan.Allusion}\"");
+            AppendBackground(sb, plan.Allusion, null);
 
         try
         {
-            var text = await CallClaudeAsync($"{BaseRules}\n{SoloRules}", sb.ToString(), 400);
-            if (!string.IsNullOrEmpty(text))
+            var raw = await CallClaudeAsync($"{BaseRules}\n{SoloRules}", sb.ToString(), 400);
+            if (!string.IsNullOrEmpty(raw))
             {
-                logger.LogDebug("Solo plan for {Player}: {Form}/{Focus}/{Voice}, allusion={Allusion}",
-                    result.MatchPlayer.Name, plan.Form, plan.MainFocus.Kind, plan.Voice, plan.Allusion ?? "none");
+                var (text, angle) = SplitAngle(raw);
+                logger.LogDebug("Solo plan for {Player}: {Form}/{Focus}/{Voice}, allusion={Allusion}, angle={Angle}",
+                    result.MatchPlayer.Name, plan.Form, plan.MainFocus.Kind, plan.Voice, plan.Allusion?.Text ?? "none", angle ?? "none");
                 logger.LogDebug("Generated message for {Player}: {Message}", result.MatchPlayer.Name, text);
-                planner.RecordSolo(storeKey, plan, text);
+                planner.RecordSolo(storeKey, plan, text, angle);
                 messageHistory.AddMessage(text, storeKey);
                 return text;
             }
@@ -128,17 +131,19 @@ public class MessageGenerator(
         sb.AppendLine($"- Emojis: {EmojiDirective(plan.EmojiBudget)}");
         sb.AppendLine($"- Do not open with: {string.Join(", ", plan.BannedOpeners)}");
         if (plan.Allusion is not null)
-            sb.AppendLine($"\nBACKGROUND on {plan.AllusionOwner} (one passing allusion, tied to their line): \"{plan.Allusion}\"");
+            AppendBackground(sb, plan.Allusion, plan.AllusionOwner);
 
         try
         {
-            var text = await CallClaudeAsync($"{BaseRules}\n{SquadRules}", sb.ToString(), 600);
-            if (!string.IsNullOrEmpty(text))
+            var raw = await CallClaudeAsync($"{BaseRules}\n{SquadRules}", sb.ToString(), 600);
+            if (!string.IsNullOrEmpty(raw))
             {
-                logger.LogDebug("Squad plan: {Form}/{Voice}, roles={Roles}",
-                    plan.Form, plan.Voice, string.Join(", ", plan.Members.Select(m => $"{m.DisplayName}={m.Role}")));
+                var (text, angle) = SplitAngle(raw);
+                logger.LogDebug("Squad plan: {Form}/{Voice}, roles={Roles}, allusion={Allusion} on {Owner}, angle={Angle}",
+                    plan.Form, plan.Voice, string.Join(", ", plan.Members.Select(m => $"{m.DisplayName}={m.Role}")),
+                    plan.Allusion?.Text ?? "none", plan.AllusionOwner ?? "nobody", angle ?? "none");
                 logger.LogDebug("Generated squad message: {Message}", text);
-                planner.RecordSquad(plan, text);
+                planner.RecordSquad(plan, text, angle);
                 messageHistory.AddMessage(text);
                 return text;
             }
@@ -230,6 +235,28 @@ public class MessageGenerator(
 
         var streakEmoji = wins > losses ? "🔥" : wins < losses ? "💀" : "😐";
         return $"{streakEmoji} **{playerName}**: {wins}W / {losses}L over the last {ordered.Count} matches.";
+    }
+
+    private static void AppendBackground(StringBuilder sb, RoastAllusion allusion, string? owner)
+    {
+        var about = owner is not null ? $" on {owner} (goes in their line)" : "";
+        sb.AppendLine();
+        sb.AppendLine($"BACKGROUND{about}, roast material that must show up in the message: \"{allusion.Text}\"");
+        if (allusion.PreviousAngles.Count > 0)
+            sb.AppendLine($"Angles already used for this, do not reuse: {string.Join(", ", allusion.PreviousAngles.Select(a => $"\"{a}\""))}");
+    }
+
+    /// <summary>Strips the trailing "ANGLE:" line the model adds when it used a BACKGROUND note.</summary>
+    private static (string Text, string? Angle) SplitAngle(string raw)
+    {
+        var lines = raw.TrimEnd().Split('\n').ToList();
+        var index = lines.FindLastIndex(l => l.TrimStart('*', '_', ' ').StartsWith("ANGLE:", StringComparison.OrdinalIgnoreCase));
+        if (index < 0)
+            return (raw.Trim(), null);
+
+        var angle = lines[index].TrimStart('*', '_', ' ')["ANGLE:".Length..].Trim(' ', '*', '_', '"');
+        lines.RemoveAt(index);
+        return (string.Join('\n', lines).Trim(), string.IsNullOrWhiteSpace(angle) ? null : angle);
     }
 
     private static string EmojiDirective(int budget) => budget switch

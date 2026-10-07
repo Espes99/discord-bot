@@ -13,8 +13,13 @@ public class RoastPlanner(IRoastPlanStore planStore, IPlayerProfileStore profile
     private const int RecentFormWindow = 3;
     private const int RecentVoiceWindow = 4;
     private const int RecentFocusWindow = 2;
-    private const int RecentAllusionWindow = 2;
     private const int RecentOpenerWindow = 3;
+
+    private const double SoloAllusionChance = 0.6;
+    private const double SquadAllusionChance = 0.7;
+    // A small group with few traits plays several games a day, so cooldown is measured in time, not messages
+    private static readonly TimeSpan TraitCooldown = TimeSpan.FromDays(3);
+    private const int PreviousAnglesShown = 5;
 
     private static readonly string[] Voices =
     [
@@ -119,7 +124,7 @@ public class RoastPlanner(IRoastPlanStore planStore, IPlayerProfileStore profile
             EmojiBudget = Rng.Next(0, 3),
             MainFocus = main,
             SideFocus = side,
-            Allusion = PickAllusion(storeKey, records),
+            Allusion = Rng.NextDouble() < SoloAllusionChance ? PickAllusion(storeKey) : null,
             BannedOpeners = BannedOpeners(records.Select(r => r.Opener), result.MatchPlayer.Name)
         };
     }
@@ -162,18 +167,23 @@ public class RoastPlanner(IRoastPlanStore planStore, IPlayerProfileStore profile
         var form = PickExcluding(Enum.GetValues<SquadForm>(), records.TakeLast(RecentFormWindow).Select(r => r.Form));
         var voice = PickExcluding(Voices, records.TakeLast(RecentVoiceWindow).Select(r => r.Voice));
 
-        string? allusion = null;
-        string? owner = null;
-        if (Rng.NextDouble() < 0.5)
+        RoastAllusion? allusion = null;
+        SquadMemberPlan? owner = null;
+        if (Rng.NextDouble() < SquadAllusionChance)
         {
-            var shuffled = results.Select((r, i) => (r, key: keys[i])).OrderBy(_ => Rng.Next()).ToList();
-            foreach (var (r, key) in shuffled)
+            // Spread trait jokes around the squad, favouring the roles that get the most text
+            var lastOwner = records.LastOrDefault()?.AllusionOwnerKey;
+            var pool = members.Where(m => m.StoreKey != lastOwner).ToList();
+            if (pool.Count == 0)
+                pool = [.. members];
+            while (pool.Count > 0 && allusion is null)
             {
-                allusion = PickAllusion(key, planStore.GetPlayerRecords(key), force: true);
-                if (allusion is null) continue;
-                owner = $"{r.MatchPlayer.Name}#{r.MatchPlayer.Tag}";
-                break;
+                owner = PickWeighted(pool, m => AllusionRoleWeight(m.Role));
+                pool.Remove(owner);
+                allusion = PickAllusion(owner.StoreKey);
             }
+            if (allusion is null)
+                owner = null;
         }
 
         var (min, max) = results.Count switch
@@ -192,12 +202,13 @@ public class RoastPlanner(IRoastPlanStore planStore, IPlayerProfileStore profile
             EmojiBudget = Rng.Next(0, 3),
             Members = members,
             Allusion = allusion,
-            AllusionOwner = owner,
+            AllusionOwner = owner?.DisplayName,
+            AllusionOwnerKey = owner?.StoreKey,
             BannedOpeners = BannedOpeners(records.Select(r => r.Opener), null)
         };
     }
 
-    public void RecordSolo(string storeKey, RoastPlan plan, string message)
+    public void RecordSolo(string storeKey, RoastPlan plan, string message, string? angle)
     {
         planStore.AddPlayerRecord(storeKey, new RoastPlanRecord
         {
@@ -206,12 +217,15 @@ public class RoastPlanner(IRoastPlanStore planStore, IPlayerProfileStore profile
             Voice = plan.Voice,
             Form = plan.Form.ToString(),
             FocusKind = plan.MainFocus.Kind,
-            Allusion = plan.Allusion,
+            Allusion = plan.Allusion?.Text,
             Opener = Opener(message)
         });
+
+        if (plan.Allusion is not null)
+            planStore.AddTraitUse(storeKey, new TraitUseRecord { At = DateTime.UtcNow, Trait = plan.Allusion.Text, Angle = angle });
     }
 
-    public void RecordSquad(SquadRoastPlan plan, string message)
+    public void RecordSquad(SquadRoastPlan plan, string message, string? angle)
     {
         var squadKey = RoastPlanStore.SquadKey(plan.Members.Select(m => m.StoreKey));
         planStore.AddSquadRecord(squadKey, new SquadPlanRecord
@@ -220,12 +234,13 @@ public class RoastPlanner(IRoastPlanStore planStore, IPlayerProfileStore profile
             Voice = plan.Voice,
             Form = plan.Form.ToString(),
             Roles = plan.Members.ToDictionary(m => m.StoreKey, m => m.Role.ToString()),
+            AllusionOwnerKey = plan.AllusionOwnerKey,
             Opener = Opener(message)
         });
 
         foreach (var member in plan.Members)
         {
-            var usedAllusion = plan.AllusionOwner == member.DisplayName ? plan.Allusion : null;
+            var usedAllusion = plan.AllusionOwnerKey == member.StoreKey ? plan.Allusion?.Text : null;
             planStore.AddPlayerRecord(member.StoreKey, new RoastPlanRecord
             {
                 At = DateTime.UtcNow,
@@ -234,6 +249,9 @@ public class RoastPlanner(IRoastPlanStore planStore, IPlayerProfileStore profile
                 Allusion = usedAllusion
             });
         }
+
+        if (plan.Allusion is not null && plan.AllusionOwnerKey is not null)
+            planStore.AddTraitUse(plan.AllusionOwnerKey, new TraitUseRecord { At = DateTime.UtcNow, Trait = plan.Allusion.Text, Angle = angle });
     }
 
     public static string RandomVoice() => Voices[Rng.Next(Voices.Length)];
@@ -272,39 +290,52 @@ public class RoastPlanner(IRoastPlanStore planStore, IPlayerProfileStore profile
         return roles;
     }
 
-    /// <summary>Bio and traits share one slot. Nothing about the player reaches the model unless it wins the draw.</summary>
-    private string? PickAllusion(string storeKey, List<RoastPlanRecord> records, bool force = false)
+    /// <summary>
+    /// Bio and manual traits are the pool; auto traits only fill in while every personal one is cooling down.
+    /// Less-used items are favoured, and the angles already used for the pick go along so the joke changes.
+    /// </summary>
+    private RoastAllusion? PickAllusion(string storeKey)
     {
         var profile = profileStore.GetProfile(storeKey);
         if (profile is null)
             return null;
 
-        var options = new List<string>();
+        var uses = planStore.GetTraitUses(storeKey);
+        var cutoff = DateTime.UtcNow - TraitCooldown;
+        var cooling = uses.Where(u => u.At > cutoff).Select(u => u.Trait).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var personal = new List<string>();
         if (!string.IsNullOrWhiteSpace(profile.Bio))
-            options.Add(profile.Bio.Trim());
-        options.AddRange(profile.ManualTraits);
-        options.AddRange(profile.AutoTraits);
-        if (options.Count == 0)
-            return null;
+            personal.Add(profile.Bio.Trim());
+        personal.AddRange(profile.ManualTraits);
 
-        if (!force && Rng.NextDouble() < 0.4)
-            return null;
-
-        var recent = records.TakeLast(RecentAllusionWindow)
-            .Where(r => r.Allusion is not null)
-            .Select(r => r.Allusion!)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var uses = records
-            .Where(r => r.Allusion is not null)
-            .GroupBy(r => r.Allusion!, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
-
-        var pool = options.Where(o => !recent.Contains(o)).ToList();
+        var pool = personal.Where(t => !cooling.Contains(t)).ToList();
         if (pool.Count == 0)
-            pool = options;
+            pool = profile.AutoTraits.Where(t => !cooling.Contains(t)).ToList();
+        if (pool.Count == 0)
+            return null;
 
-        return PickWeighted(pool, o => 1.0 / (1 + uses.GetValueOrDefault(o, 0)));
+        var useCounts = uses
+            .GroupBy(u => u.Trait, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
+        var trait = PickWeighted(pool, t => 1.0 / (1 + useCounts.GetValueOrDefault(t, 0)));
+
+        var angles = uses
+            .Where(u => u.Trait.Equals(trait, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(u.Angle))
+            .Select(u => u.Angle!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .TakeLast(PreviousAnglesShown)
+            .ToList();
+        return new RoastAllusion(trait, angles);
     }
+
+    private static double AllusionRoleWeight(SquadRole role) => role switch
+    {
+        SquadRole.Scapegoat => 3,
+        SquadRole.Carry => 2,
+        SquadRole.Ghost => 1.5,
+        _ => 0.5
+    };
 
     private static List<string> BannedOpeners(IEnumerable<string?> recentOpeners, string? playerName)
     {

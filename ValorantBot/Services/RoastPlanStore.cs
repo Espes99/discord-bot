@@ -10,6 +10,8 @@ namespace ValorantBot.Services;
 public class RoastPlanStore : IRoastPlanStore
 {
     private const int MaxRecordsPerKey = 12;
+    // Trait uses back the multi-day cooldown and the "angles already used" list, so they outlive plan records
+    private const int MaxTraitUsesPerPlayer = 60;
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     private readonly string _filePath;
@@ -64,7 +66,24 @@ public class RoastPlanStore : IRoastPlanStore
         }
     }
 
-    private static void Append<T>(Dictionary<string, List<T>> map, string key, T record)
+    public List<TraitUseRecord> GetTraitUses(string playerKey)
+    {
+        lock (_lock)
+        {
+            return _data.TraitUses.TryGetValue(playerKey.ToLowerInvariant(), out var list) ? [.. list] : [];
+        }
+    }
+
+    public void AddTraitUse(string playerKey, TraitUseRecord use)
+    {
+        lock (_lock)
+        {
+            Append(_data.TraitUses, playerKey.ToLowerInvariant(), use, MaxTraitUsesPerPlayer);
+            Save();
+        }
+    }
+
+    private static void Append<T>(Dictionary<string, List<T>> map, string key, T record, int max = MaxRecordsPerKey)
     {
         if (!map.TryGetValue(key, out var list))
         {
@@ -72,8 +91,8 @@ public class RoastPlanStore : IRoastPlanStore
             map[key] = list;
         }
         list.Add(record);
-        if (list.Count > MaxRecordsPerKey)
-            map[key] = list[^MaxRecordsPerKey..];
+        if (list.Count > max)
+            map[key] = list[^max..];
     }
 
     private void Load()
@@ -110,5 +129,6 @@ public class RoastPlanStore : IRoastPlanStore
     {
         public Dictionary<string, List<RoastPlanRecord>> Players { get; set; } = new();
         public Dictionary<string, List<SquadPlanRecord>> Squads { get; set; } = new();
+        public Dictionary<string, List<TraitUseRecord>> TraitUses { get; set; } = new();
     }
 }
