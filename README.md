@@ -12,7 +12,7 @@ A .NET 9 Discord bot that tracks Valorant match stats for configured players and
 2. When a new match is found, it analyzes performance (KDA, ACS, HS%) and assigns a rating from Terrible to Excellent
 3. Match results are persisted locally (last 20 per player) to build player history and prevent duplicate messages
 4. If 2+ tracked players were on the same team, a squad message is generated that compares and roasts the group
-5. Claude Sonnet generates a funny/toxic message based on performance, trends, and player history
+5. Claude Sonnet 5.5 generates a funny/toxic message based on performance, trends, and player history
 6. The message and a color-coded stats embed are posted to a configured Discord channel
 
 Players can also trigger a check on-demand using the `/latest-match <name> <tag>` slash command.
@@ -56,7 +56,7 @@ Each player gets a color-coded stats card with agent, score, KDA, ACS, and HS%. 
 - **Player history tracking** - persists the last 20 matches per player to `data/match_history.json`, enabling trend analysis (improving/stable/declining), win streaks, and per-map stats
 - **Duplicate prevention** - tracks the last seen match ID per player in `data/last_matches.json` to avoid re-posting
 - **Performance ratings** - point-based system across KDA, ACS, and HS% producing five tiers: Terrible, Bad, Average, Good, Excellent
-- **AI-powered roasts** - Claude Sonnet generates personalized messages using player stats, history trends, and agent/map context; falls back to static templates if the API is unavailable
+- **AI-powered roasts** - Claude Sonnet 5.5 (`claude-sonnet-5-5`) generates personalized messages using player stats, history trends, and agent/map context; falls back to static templates if the API is unavailable
 - **Player profiles** - persistent per-player bios and traits (manual and auto-derived) that give the AI personal context for more targeted roasts
 - **Auto-derived traits** - automatically detects patterns like one-tricking, bottom-fragging, map curses, hardstuck ranks, and streak tilting from match history
 - **Rank change detection** - detects promotions and demotions between matches, generates dedicated AI messages for tier changes (e.g. Silver to Gold)
