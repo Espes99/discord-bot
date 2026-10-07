@@ -57,7 +57,7 @@ Tracked players are managed dynamically via `/track` and `/untrack` Discord comm
 
 ## Notes
 
-- Claude Sonnet 5.5 has adaptive thinking on by default, so responses start with thinking blocks. `MessageGenerator.CallClaudeAsync` only reads `TextContent` blocks (never `Content.First().ToString()`, which yields the type name) and adds `ThinkingTokenHeadroom` on top of each caller's text budget, since thinking counts toward `max_tokens`
+- Claude Sonnet 5.5 has adaptive thinking on by default, so responses start with thinking blocks. `MessageGenerator.CallClaudeAsync` only reads `TextContent` blocks (never `Content.First().ToString()`, which yields the type name) posts `Klarte ikke å parse responsen ;_; Error; <details>` if there is no text, and adds `ThinkingTokenHeadroom` on top of each caller's text budget, since thinking counts toward `max_tokens`
 - Sonnet 5.5 rejects `thinking: disabled` and non-default `temperature`/`top_p`/`top_k` with a 400 error
 - `MatchTracker` and `MessageTemplates` exist but are currently unused in the main flow
 - Bot messages are generated via the AI system prompt

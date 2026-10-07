@@ -267,7 +267,12 @@ public class MessageGenerator(
 
                 // Thinking blocks precede the text, so only use text content
                 var text = string.Concat(response.Content.OfType<TextContent>().Select(c => c.Text)).Trim();
-                return string.IsNullOrEmpty(text) ? null : text;
+                if (!string.IsNullOrEmpty(text))
+                    return text;
+
+                var error = $"no text in response (stop_reason: {response.StopReason}, blocks: {string.Join(", ", response.Content.Select(c => c.GetType().Name))})";
+                logger.LogWarning("Claude returned {Error}", error);
+                return $"Klarte ikke å parse responsen ;_; Error; {error}";
             }
             catch (HttpRequestException) when (attempt < maxRetries)
             {
