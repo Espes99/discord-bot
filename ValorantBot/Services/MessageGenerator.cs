@@ -245,7 +245,7 @@ public class MessageGenerator(
 
         var parameters = new MessageParameters
         {
-            Model = "claude-sonnet-4-6",
+            Model = "claude-sonnet-5-5",
             MaxTokens = maxTokens,
             Temperature = 1.0m,
             System = [new SystemMessage(systemPrompt) { CacheControl = new CacheControl { Type = CacheControlType.ephemeral } }],
