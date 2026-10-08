@@ -13,47 +13,7 @@ public static class ProfileTraitDeriver
     private const int DropAtHits = 1;
     private const double HoldRatioEase = 0.85;
 
-    private static readonly Dictionary<string, string> AgentRoles = new(StringComparer.OrdinalIgnoreCase)
-    {
-        // Duelists
-        ["Jett"] = "Duelist",
-        ["Phoenix"] = "Duelist",
-        ["Reyna"] = "Duelist",
-        ["Raze"] = "Duelist",
-        ["Yoru"] = "Duelist",
-        ["Neon"] = "Duelist",
-        ["Iso"] = "Duelist",
-        ["Waylay"] = "Duelist",
-
-        // Initiators
-        ["Sova"] = "Initiator",
-        ["Breach"] = "Initiator",
-        ["Skye"] = "Initiator",
-        ["KAY/O"] = "Initiator",
-        ["Fade"] = "Initiator",
-        ["Gekko"] = "Initiator",
-        ["Tejo"] = "Initiator",
-
-        // Controllers
-        ["Brimstone"] = "Controller",
-        ["Omen"] = "Controller",
-        ["Viper"] = "Controller",
-        ["Astra"] = "Controller",
-        ["Harbor"] = "Controller",
-        ["Clove"] = "Controller",
-        ["Miks"] = "Controller",
-
-        // Sentinels
-        ["Sage"] = "Sentinel",
-        ["Cypher"] = "Sentinel",
-        ["Killjoy"] = "Sentinel",
-        ["Chamber"] = "Sentinel",
-        ["Deadlock"] = "Sentinel",
-        ["Vyse"] = "Sentinel",
-    };
-
-    public static string? RoleOf(string agent) =>
-        AgentRoles.TryGetValue(agent, out var role) ? role : null;
+    public static string? RoleOf(string agent) => GameContent.RoleOf(agent);
 
     public static List<AutoTrait> DeriveTraits(List<MatchHistoryEntry> history, PlayerHistorySummary? summary, IReadOnlyCollection<string>? currentLabels = null)
     {
@@ -246,9 +206,7 @@ public static class ProfileTraitDeriver
         if (summary.AgentStats.Count >= 2)
         {
             var top2 = summary.AgentStats.Take(2).ToList();
-            if (AgentRoles.TryGetValue(top2[0].Agent, out var role1) &&
-                AgentRoles.TryGetValue(top2[1].Agent, out var role2) &&
-                role1 == role2)
+            if (GameContent.RoleOf(top2[0].Agent) is { } role1 && role1 == GameContent.RoleOf(top2[1].Agent))
             {
                 candidates.Add(new Candidate(new AutoTrait($"{role1.ToLowerInvariant()} instalock", $"most played: {top2[0].Agent} ({top2[0].Games}) and {top2[1].Agent} ({top2[1].Games})"), "Agent", 1.3));
             }
