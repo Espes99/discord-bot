@@ -281,7 +281,7 @@ public class RoastPlanner(IRoastPlanStore planStore, IPlayerProfileStore profile
     }
 
     /// <summary>
-    /// Bio and manual traits are the pool; auto traits only fill in while every personal one is cooling down.
+    /// Bio, manual traits and auto traits share one pool; each item cools down for TraitCooldown after use.
     /// Less-used items are favoured, and the angles already used for the pick go along so the joke changes.
     /// </summary>
     private RoastAllusion? PickAllusion(string storeKey)
@@ -294,29 +294,30 @@ public class RoastPlanner(IRoastPlanStore planStore, IPlayerProfileStore profile
         var cutoff = DateTime.UtcNow - TraitCooldown;
         var cooling = uses.Where(u => u.At > cutoff).Select(u => u.Trait).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var personal = new List<string>();
+        var evidence = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         if (!string.IsNullOrWhiteSpace(profile.Bio))
-            personal.Add(profile.Bio.Trim());
-        personal.AddRange(profile.ManualTraits);
+            evidence.TryAdd(profile.Bio.Trim(), null);
+        foreach (var trait in profile.ManualTraits)
+            evidence.TryAdd(trait, null);
+        foreach (var trait in profile.AutoTraits)
+            evidence.TryAdd(trait.Label, trait.Evidence);
 
-        var pool = personal.Where(t => !cooling.Contains(t)).ToList();
-        if (pool.Count == 0)
-            pool = profile.AutoTraits.Where(t => !cooling.Contains(t)).ToList();
+        var pool = evidence.Keys.Where(t => !cooling.Contains(t)).ToList();
         if (pool.Count == 0)
             return null;
 
         var useCounts = uses
             .GroupBy(u => u.Trait, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
-        var trait = PickWeighted(pool, t => 1.0 / (1 + useCounts.GetValueOrDefault(t, 0)));
+        var picked = PickWeighted(pool, t => 1.0 / (1 + useCounts.GetValueOrDefault(t, 0)));
 
         var angles = uses
-            .Where(u => u.Trait.Equals(trait, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(u.Angle))
+            .Where(u => u.Trait.Equals(picked, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(u.Angle))
             .Select(u => u.Angle!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .TakeLast(PreviousAnglesShown)
             .ToList();
-        return new RoastAllusion(trait, angles);
+        return new RoastAllusion(picked, angles, evidence[picked]);
     }
 
     private static double AllusionRoleWeight(SquadRole role) => role switch

@@ -130,7 +130,7 @@ public class PlayerProfileStore : IPlayerProfileStore
         }
     }
 
-    public void UpdateAutoTraits(string playerKey, List<string> traits)
+    public void UpdateAutoTraits(string playerKey, List<AutoTrait> traits)
     {
         lock (_lock)
         {

@@ -1233,7 +1233,12 @@ public class Worker(
             embed.AddField("Manual Traits", string.Join("\n", profile.ManualTraits.Select(t => $"- {t}")));
 
         if (profile.AutoTraits.Count > 0)
-            embed.AddField("Auto Traits", string.Join("\n", profile.AutoTraits.Select(t => $"- {t}")));
+        {
+            var autoText = string.Join("\n", profile.AutoTraits.Select(t =>
+                t.Evidence is null ? $"- {t.Label}" : $"- **{t.Label}**: {t.Evidence}"));
+            // Discord rejects embed fields over 1024 characters
+            embed.AddField("Auto Traits", autoText.Length > 1024 ? autoText[..1021] + "..." : autoText);
+        }
 
         if (string.IsNullOrWhiteSpace(profile.Bio) && profile.ManualTraits.Count == 0 && profile.AutoTraits.Count == 0)
             embed.WithDescription("Profile exists but has no bio, traits, or auto traits yet.");
@@ -1360,7 +1365,8 @@ public class Worker(
     {
         var history = matchHistoryStore.GetHistory(playerKey);
         var summary = HistorySummarizer.Summarize(history);
-        var autoTraits = ProfileTraitDeriver.DeriveTraits(history, summary);
+        var current = playerProfileStore.GetProfile(playerKey)?.AutoTraits.Select(t => t.Label).ToList();
+        var autoTraits = ProfileTraitDeriver.DeriveTraits(history, summary, current);
         playerProfileStore.UpdateAutoTraits(playerKey, autoTraits);
     }
 

@@ -24,4 +24,7 @@ public class PerformanceResult
     public WeaponContext? WeaponContext { get; init; }
 
     public MatchHighlights Highlights { get; init; } = MatchHighlights.Empty;
+
+    public BehaviorSignals? Signals { get; init; }
+    public BehaviorSignals? LobbySignals { get; init; }
 }

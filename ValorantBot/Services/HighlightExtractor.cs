@@ -8,11 +8,7 @@ namespace ValorantBot.Services;
 /// </summary>
 public static class HighlightExtractor
 {
-    private static readonly HashSet<string> Rifles = new(StringComparer.OrdinalIgnoreCase) { "Vandal", "Phantom", "Guardian", "Bulldog" };
-    private const int EcoTeamAverageLoadout = 2000;
-    private const int RifleLoadout = 2900;
-
-    public static MatchHighlights Extract(MatchDetailData match, MatchPlayer player)
+    public static MatchHighlights Extract(MatchDetailData match, MatchPlayer player, BehaviorSignals? signals)
     {
         var items = new List<Highlight>();
         var puuid = player.Puuid;
@@ -27,8 +23,10 @@ public static class HighlightExtractor
         var teammates = match.Players.Where(p => p.TeamId == team).ToList();
         var lost = match.Teams.FirstOrDefault(t => t.TeamId == team)?.Won == false;
 
-        AddKillTimeline(items, kills, puuid, team, agent, totalRounds, rounds);
-        AddRoundEvents(items, rounds, puuid, team, agent, teammates, totalRounds);
+        AddKillTimeline(items, kills, puuid, agent, totalRounds);
+        AddRoundEvents(items, rounds, puuid, team, totalRounds);
+        if (signals is not null)
+            AddSignals(items, signals, totalRounds);
         AddBehavior(items, player, totalRounds);
         AddDamage(items, player, teammates, totalRounds);
         AddEconomy(items, player, teammates);
@@ -42,7 +40,7 @@ public static class HighlightExtractor
 
     private static bool Is(string? a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
-    private static void AddKillTimeline(List<Highlight> items, List<MatchKill> kills, string puuid, string team, string agent, int totalRounds, List<MatchRound> rounds)
+    private static void AddKillTimeline(List<Highlight> items, List<MatchKill> kills, string puuid, string agent, int totalRounds)
     {
         if (kills.Count == 0) return;
 
@@ -84,58 +82,21 @@ public static class HighlightExtractor
         var ownKills = kills.Count(k => Is(k.Killer?.Puuid, puuid));
         if (assists >= ownKills + 5 && assists >= 8)
             items.Add(new Highlight("AssistMerchant", $"{assists} assists to {ownKills} kills, did the damage and let others take the kill", 2));
-
-        AddClutches(items, byRound, rounds, puuid, team);
     }
 
-    private static void AddClutches(List<Highlight> items, Dictionary<int, List<MatchKill>> byRound, List<MatchRound> rounds, string puuid, string team)
+    private static void AddSignals(List<Highlight> items, BehaviorSignals s, int totalRounds)
     {
-        const int teamSize = 5;
-        var clutches = 0;
-        var lastAliveLost = 0;
-
-        foreach (var round in rounds)
-        {
-            if (!byRound.TryGetValue(round.Id, out var roundKills))
-                continue;
-
-            // Walk the round in time order until the player is the only teammate left standing.
-            var teammatesDead = 0;
-            var enemiesDead = 0;
-            var playerDiedBeforeAlone = false;
-            var becameAlone = false;
-            foreach (var kill in roundKills)
-            {
-                var victim = kill.Victim;
-                if (victim is null) continue;
-                if (Is(victim.Team, team))
-                {
-                    if (Is(victim.Puuid, puuid)) { playerDiedBeforeAlone = true; break; }
-                    teammatesDead++;
-                    if (teammatesDead == teamSize - 1) { becameAlone = true; break; }
-                }
-                else
-                {
-                    enemiesDead++;
-                }
-            }
-            if (playerDiedBeforeAlone || !becameAlone)
-                continue;
-
-            var enemiesLeft = teamSize - enemiesDead;
-            if (Is(round.WinningTeam, team) && enemiesLeft >= 2)
-                clutches++;
-            else if (!Is(round.WinningTeam, team))
-                lastAliveLost++;
-        }
-
-        if (clutches > 0)
-            items.Add(new Highlight("Clutch", clutches == 1 ? "clutched a round alone" : $"clutched {clutches} rounds alone", 3));
-        if (lastAliveLost >= 5)
-            items.Add(new Highlight("LastAliveLost", $"was the last one alive in {lastAliveLost} rounds and lost every one of them", 1));
+        if (s.Clutches > 0)
+            items.Add(new Highlight("Clutch", s.Clutches == 1 ? "clutched a round alone" : $"clutched {s.Clutches} rounds alone", 3));
+        if (s.LastAliveLost >= 5)
+            items.Add(new Highlight("LastAliveLost", $"was the last one alive in {s.LastAliveLost} rounds and lost every one of them", 1));
+        if (s.EcoRifleBuys >= 2)
+            items.Add(new Highlight("EcoRifle", $"bought a rifle on {s.EcoRifleBuys} of the team's eco rounds", 2));
+        if (s.ZeroDamageRounds >= totalRounds * 0.45)
+            items.Add(new Highlight("ZeroDamageRounds", $"did zero damage in {s.ZeroDamageRounds} of {totalRounds} rounds", 3));
     }
 
-    private static void AddRoundEvents(List<Highlight> items, List<MatchRound> rounds, string puuid, string team, string agent, List<MatchPlayer> teammates, int totalRounds)
+    private static void AddRoundEvents(List<Highlight> items, List<MatchRound> rounds, string puuid, string team, int totalRounds)
     {
         if (rounds.Count == 0) return;
 
@@ -153,31 +114,6 @@ public static class HighlightExtractor
         var spawn = rounds.Count(r => r.Stats?.Any(s => Is(s.Player?.Puuid, puuid) && s.StayedInSpawn) == true);
         if (spawn >= 2)
             items.Add(new Highlight("Spawn", $"stayed in spawn for {spawn} whole rounds", 3));
-
-        var ecoRifleBuys = 0;
-        var zeroDamageRounds = 0;
-        foreach (var round in rounds)
-        {
-            if (round.Stats is null) continue;
-            var mine = round.Stats.FirstOrDefault(s => Is(s.Player?.Puuid, puuid));
-            if (mine is null) continue;
-
-            var teamLoadouts = round.Stats
-                .Where(s => Is(s.Player?.Team, team) && !Is(s.Player?.Puuid, puuid) && s.Economy is not null)
-                .Select(s => s.Economy!.LoadoutValue)
-                .ToList();
-            if (teamLoadouts.Count >= 3 && teamLoadouts.Average() < EcoTeamAverageLoadout
-                && mine.Economy is not null
-                && (mine.Economy.LoadoutValue >= RifleLoadout || Rifles.Contains(mine.Economy.Weapon?.Name ?? "")))
-                ecoRifleBuys++;
-
-            if (mine.DamageEvents is not null && mine.DamageDealt == 0)
-                zeroDamageRounds++;
-        }
-        if (ecoRifleBuys >= 2)
-            items.Add(new Highlight("EcoRifle", $"bought a rifle on {ecoRifleBuys} of the team's eco rounds", 2));
-        if (zeroDamageRounds >= totalRounds * 0.45)
-            items.Add(new Highlight("ZeroDamageRounds", $"did zero damage in {zeroDamageRounds} of {totalRounds} rounds", 3));
     }
 
     private static void AddBehavior(List<Highlight> items, MatchPlayer player, int totalRounds)
