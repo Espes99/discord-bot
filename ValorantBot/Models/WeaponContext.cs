@@ -1,3 +1,5 @@
+using ValorantBot.Services;
+
 namespace ValorantBot.Models;
 
 public enum WeaponCategory
@@ -23,18 +25,6 @@ public class WeaponContext
 
 public static class WeaponClassifier
 {
-    private static readonly HashSet<string> NonPrecisionWeapons = new(StringComparer.OrdinalIgnoreCase)
-    {
-        // Shotguns
-        "Judge", "Bucky",
-        // Snipers (body shots are high damage / one-shot)
-        "Operator", "Marshal", "Outlaw",
-        // Machine guns
-        "Odin", "Ares",
-        // Melee
-        "Melee", "Knife", "Tactical Knife"
-    };
-
     public static WeaponCategory Classify(string? weaponName, string? damageType)
     {
         if (damageType is not null &&
@@ -44,7 +34,7 @@ public static class WeaponClassifier
         if (string.IsNullOrEmpty(weaponName))
             return WeaponCategory.Unknown;
 
-        return NonPrecisionWeapons.Contains(weaponName)
+        return GameContent.IsNonPrecision(weaponName)
             ? WeaponCategory.NonPrecision
             : WeaponCategory.Precision;
     }

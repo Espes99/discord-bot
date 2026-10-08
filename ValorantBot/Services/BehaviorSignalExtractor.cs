@@ -12,7 +12,6 @@ public static class BehaviorSignalExtractor
     public const double NearbyUnits = 1500;
     public const double IsolatedUnits = 2500;
 
-    private static readonly HashSet<string> Rifles = new(StringComparer.OrdinalIgnoreCase) { "Vandal", "Phantom", "Guardian", "Bulldog" };
     private const int EcoTeamAverageLoadout = 2000;
     private const int RifleLoadout = 2900;
 
@@ -278,7 +277,7 @@ public static class BehaviorSignalExtractor
                 .ToList();
             if (teamLoadouts.Count >= 3 && teamLoadouts.Average() < EcoTeamAverageLoadout
                 && mine.Economy is not null
-                && (mine.Economy.LoadoutValue >= RifleLoadout || Rifles.Contains(mine.Economy.Weapon?.Name ?? "")))
+                && (mine.Economy.LoadoutValue >= RifleLoadout || GameContent.IsRifle(mine.Economy.Weapon?.Name)))
                 s.EcoRifleBuys++;
         }
     }

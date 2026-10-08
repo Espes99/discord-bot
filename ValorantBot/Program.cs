@@ -57,6 +57,8 @@ builder.Services.AddSingleton<IMessageGenerator, MessageGenerator>();
 builder.Services.AddSingleton<IDiscordNotifier, DiscordNotifier>();
 builder.Services.AddSingleton<IDataMigrator, DataMigrator>();
 builder.Services.AddScoped<IMatchService, MatchService>();
+builder.Services.AddHttpClient();
+builder.Services.AddHostedService<GameContentRefresher>();
 builder.Services.AddHostedService<Worker>();
 
 var host = builder.Build();
