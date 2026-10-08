@@ -38,7 +38,7 @@ public enum SquadRole
 public record RoastFocus(string Kind, string Text, int Weight);
 
 /// <summary>A bio line or trait picked as roast material, with the joke angles it was already used for.</summary>
-public record RoastAllusion(string Text, List<string> PreviousAngles, string? Evidence = null);
+public record RoastAllusion(string Text, List<string> PreviousAngles, string? Evidence = null, string? SquadTraitId = null);
 
 /// <summary>
 /// Material and limits for a solo roast. Code decides what is true and what was used recently;

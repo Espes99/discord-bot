@@ -236,7 +236,21 @@ public class RoastPlanner(IRoastPlanStore planStore, IPlayerProfileStore profile
         }
 
         if (plan.Allusion is not null && plan.AllusionOwnerKey is not null)
+        {
             planStore.AddTraitUse(plan.AllusionOwnerKey, new TraitUseRecord { At = DateTime.UtcNow, Trait = plan.Allusion.Text, Angle = NullIfBlank(choice.Angle) });
+            CoolDownMirror(plan.AllusionOwnerKey, plan.Allusion.SquadTraitId, choice.Angle);
+        }
+    }
+
+    // A symmetric squad trait sits on both players; without this the mate's copy could be the next squad roast's joke
+    private void CoolDownMirror(string ownerKey, string? squadTraitId, string? angle)
+    {
+        if (squadTraitId is null || SquadTraitDeriver.MirrorId(squadTraitId, ownerKey) is not { } mirrorId)
+            return;
+        var mateKey = SquadTraitDeriver.MateOf(squadTraitId)!;
+        var mirror = profileStore.GetProfile(mateKey)?.SquadTraits.FirstOrDefault(t => t.Id == mirrorId);
+        if (mirror is not null)
+            planStore.AddTraitUse(mateKey, new TraitUseRecord { At = DateTime.UtcNow, Trait = mirror.Label, Angle = NullIfBlank(angle) });
     }
 
     /// <summary>A shuffled handful of voices, skipping recently used ones, as inspiration for the model.</summary>
@@ -303,10 +317,14 @@ public class RoastPlanner(IRoastPlanStore planStore, IPlayerProfileStore profile
             evidence.TryAdd(trait, null);
         foreach (var trait in profile.AutoTraits)
             evidence.TryAdd(trait.Label, trait.Evidence);
+        var squadIds = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (stack is not null)
         {
             foreach (var trait in profile.SquadTraits.Where(t => t.MatePuuids.All(stack.Contains)))
-                evidence.TryAdd(trait.Label, trait.Evidence);
+            {
+                if (evidence.TryAdd(trait.Label, trait.Evidence))
+                    squadIds[trait.Label] = trait.Id;
+            }
         }
 
         var pool = evidence.Keys.Where(t => !cooling.Contains(t)).ToList();
@@ -324,7 +342,7 @@ public class RoastPlanner(IRoastPlanStore planStore, IPlayerProfileStore profile
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .TakeLast(PreviousAnglesShown)
             .ToList();
-        return new RoastAllusion(picked, angles, evidence[picked]);
+        return new RoastAllusion(picked, angles, evidence[picked], squadIds.GetValueOrDefault(picked));
     }
 
     private static double AllusionRoleWeight(SquadRole role) => role switch

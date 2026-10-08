@@ -1234,7 +1234,7 @@ public class Worker(
             embed.AddField("Manual Traits", string.Join("\n", profile.ManualTraits.Select(t => $"- {t}")));
 
         if (profile.AutoTraits.Count > 0)
-            embed.AddField("Auto Traits", FormatAutoTraits(profile.AutoTraits));
+            embed.AddField("Auto Traits", FormatTraits(profile.AutoTraits.Select(t => (t.Label, t.Evidence))));
 
         if (string.IsNullOrWhiteSpace(profile.Bio) && profile.ManualTraits.Count == 0 && profile.AutoTraits.Count == 0)
             embed.WithDescription("Profile exists but has no bio, traits, or auto traits yet.");
@@ -1244,7 +1244,7 @@ public class Worker(
 
     private async Task HandleTypicalCommandAsync(SocketSlashCommand command)
     {
-        await command.DeferAsync();
+        await command.DeferAsync(ephemeral: true);
 
         var name = command.Data.Options.First(o => o.Name == "name").Value.ToString()!;
         var tag = command.Data.Options.First(o => o.Name == "tag").Value.ToString()!;
@@ -1259,26 +1259,29 @@ public class Worker(
             profile = playerProfileStore.GetProfile(key);
         }
 
-        if (profile is not { AutoTraits.Count: > 0 })
+        if (profile is null || (profile.AutoTraits.Count == 0 && profile.SquadTraits.Count == 0))
         {
-            await command.FollowupAsync($"Nothing typical about **{name}#{tag}** yet. Auto traits show up after a few tracked matches.");
+            await command.FollowupAsync($"Nothing typical about **{name}#{tag}** yet. Traits show up after a few tracked matches.", ephemeral: true);
             return;
         }
 
         var embed = new EmbedBuilder()
             .WithTitle($"Typical {name}#{tag}")
-            .WithDescription(FormatAutoTraits(profile.AutoTraits))
             .WithColor(Color.Purple)
             .WithTimestamp(DateTimeOffset.UtcNow)
             .WithFooter("Based on recent tracked matches");
+        if (profile.AutoTraits.Count > 0)
+            embed.AddField("Auto Traits", FormatTraits(profile.AutoTraits.Select(t => (t.Label, t.Evidence))));
+        if (profile.SquadTraits.Count > 0)
+            embed.AddField("Squad Traits", FormatTraits(profile.SquadTraits.Select(t => (t.Label, (string?)t.Evidence))));
 
-        await command.FollowupAsync(embed: embed.Build());
+        await command.FollowupAsync(embed: embed.Build(), ephemeral: true);
     }
 
-    private static string FormatAutoTraits(List<AutoTrait> traits)
+    private static string FormatTraits(IEnumerable<(string Label, string? Evidence)> traits)
     {
         var text = string.Join("\n", traits.Select(t => t.Evidence is null ? $"- {t.Label}" : $"- **{t.Label}**: {t.Evidence}"));
-        // Fits both an embed field (1024) and a description; Discord rejects anything longer
+        // Discord rejects embed fields over 1024 characters
         return text.Length > 1024 ? text[..1021] + "..." : text;
     }
 

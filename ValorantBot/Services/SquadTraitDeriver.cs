@@ -20,6 +20,23 @@ public static class SquadTraitDeriver
 
     private delegate bool? Hit(MatchHistoryEntry match, bool held);
 
+    // Stored on both sides of the pair; using one puts the other on cooldown too (see RoastPlanner.RecordSquad)
+    private static readonly HashSet<string> SymmetricKinds = new(StringComparer.Ordinal) { "together", "cursed", "lucky" };
+
+    /// <summary>The id of the same trait on the mate's profile, or null when the trait is one-way.</summary>
+    public static string? MirrorId(string id, string owner)
+    {
+        var parts = id.Split(':', 2);
+        return parts.Length == 2 && SymmetricKinds.Contains(parts[0]) ? $"{parts[0]}:{owner}" : null;
+    }
+
+    /// <summary>The mate a pair trait names, or null for stack traits.</summary>
+    public static string? MateOf(string id)
+    {
+        var parts = id.Split(':', 2);
+        return parts.Length == 2 && parts[0] != "stack" ? parts[1] : null;
+    }
+
     /// <param name="owner">The player's puuid.</param>
     /// <param name="tracked">Every tracked player's puuid and display name.</param>
     /// <param name="heldIds">Ids of the squad traits the player has now, for hysteresis.</param>
@@ -78,10 +95,6 @@ public static class SquadTraitDeriver
             enterHits: 1, dropAtHits: 0);
 
         QueueRule(traits, held, mate, name, ordered);
-
-        // Symmetric traits live on one side of the pair only, so the squad roast cannot use them twice
-        if (string.CompareOrdinal(owner, mate) > 0)
-            return;
 
         HitRule(traits, held, $"together:{mate}", $"dies together with {name}", shared, Window, mates,
             (h, eased) => P(h).DiedTogether > 0 ? Compare(Rate(s => s.DiedTogether, s => s.Rounds), P(h), Randoms(h, tracked), 10, 1.8, higher: true, eased) : Randoms(h, tracked) is null ? null : false,

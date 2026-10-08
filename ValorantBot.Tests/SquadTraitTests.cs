@@ -49,4 +49,15 @@ public class SquadTraitTests
 
         Assert.DoesNotContain("leaves:mate", Ids([full, Match(2, 0), Match(1, 0)]));
     }
+
+    [Fact]
+    public void Only_symmetric_traits_have_a_mirror()
+    {
+        Assert.Equal("together:owner", SquadTraitDeriver.MirrorId("together:mate", "owner"));
+        Assert.Equal("cursed:owner", SquadTraitDeriver.MirrorId("cursed:mate", "owner"));
+        Assert.Null(SquadTraitDeriver.MirrorId("leaves:mate", "owner"));
+        Assert.Null(SquadTraitDeriver.MirrorId("stack:first", "owner"));
+        Assert.Equal("mate", SquadTraitDeriver.MateOf("together:mate"));
+        Assert.Null(SquadTraitDeriver.MateOf("stack:anchor"));
+    }
 }
