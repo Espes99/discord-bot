@@ -14,7 +14,7 @@ dotnet test                     # Run ValorantBot.Tests (signals, trait derivati
 
 A .NET 9 Worker Service Discord bot that checks Valorant match stats for tracked players via the HenrikDev API, then uses Claude Sonnet to generate banter/roast messages and posts them to a Discord channel.
 
-Triggered on-demand via the `/latest-match` Discord slash command — no polling or scheduling.
+`Worker` polls tracked players for new competitive matches on `Polling.IntervalSeconds` (default 1200), and `/latest-match` triggers the same flow on demand.
 
 ## Architecture
 
@@ -46,7 +46,7 @@ Stacks are grouped by `party_id` from the match details (team id as fallback). S
 - `HenrikDevValorantApi.ApiKey` — from api.henrikdev.xyz dashboard
 - `Anthropic.ApiKey` — from console.anthropic.com
 
-Tracked players are managed dynamically via `/track` and `/untrack` Discord commands and persisted to `/data/tracked_players.json` (not in appsettings).
+Tracked players are managed dynamically via `/track` and `/untrack` Discord commands and persisted to `tracked_players.json` in `DATA_DIR` (not in appsettings).
 
 ## Key Dependencies
 
