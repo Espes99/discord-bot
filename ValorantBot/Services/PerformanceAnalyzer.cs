@@ -59,7 +59,8 @@ public class PerformanceAnalyzer(ILogger<PerformanceAnalyzer> logger) : IPerform
             WeaponContext = weaponContext,
             Highlights = highlights,
             Signals = signals?.Player,
-            LobbySignals = signals?.Lobby
+            LobbySignals = signals?.Lobby,
+            Teammates = signals?.Teammates
         };
     }
 

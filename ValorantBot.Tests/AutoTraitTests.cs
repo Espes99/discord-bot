@@ -38,7 +38,7 @@ public class AutoTraitTests
             ]
         };
 
-        var s = BehaviorSignalExtractor.ComputeAll(match);
+        var (s, pairs) = BehaviorSignalExtractor.ComputeAll(match);
 
         Assert.Equal(1, s["a1"].LastAlive);
         Assert.Equal(1, s["a1"].LastAliveLost);
@@ -49,6 +49,12 @@ public class AutoTraitTests
         Assert.Equal(1, s["a2"].DeathsTraded);
         Assert.Equal(1, s["a5"].IsolatedDeaths);
         Assert.Equal(2, s["b1"].FirstBloods);
+
+        Assert.Equal(2, pairs[("a1", "a2")].MateNearbyDeaths);
+        Assert.Equal(1, pairs[("a1", "a2")].Trades);
+        Assert.Equal(2, pairs[("a2", "a1")].DiedFirst);
+        Assert.Equal(2, pairs[("a1", "a2")].MateDiedFirst);
+        Assert.Equal(1, pairs[("a2", "a3")].DiedTogether);
     }
 
     [Fact]
