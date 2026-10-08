@@ -57,6 +57,9 @@ public class DiscordNotifier : IDiscordNotifier
     public event Func<SocketSlashCommand, Task>? OnProfileCommand;
 
     /// <inheritdoc />
+    public event Func<SocketSlashCommand, Task>? OnTypicalCommand;
+
+    /// <inheritdoc />
     public event Func<SocketSlashCommand, Task>? OnToggleProfileCommand;
     public event Func<SocketSlashCommand, Task>? OnToggleLanguageCommand;
 
@@ -200,6 +203,12 @@ public class DiscordNotifier : IDiscordNotifier
             .AddOption("name", ApplicationCommandOptionType.String, "Player name", isRequired: true)
             .AddOption("tag", ApplicationCommandOptionType.String, "Player tag (e.g. 1234)", isRequired: true);
 
+        var typicalCommand = new SlashCommandBuilder()
+            .WithName("typical")
+            .WithDescription("Show what is typical for a player right now (auto traits)")
+            .AddOption("name", ApplicationCommandOptionType.String, "Player name", isRequired: true)
+            .AddOption("tag", ApplicationCommandOptionType.String, "Player tag (e.g. 1234)", isRequired: true);
+
         var toggleProfileCommand = new SlashCommandBuilder()
             .WithName("toggle-profile")
             .WithDescription("Toggle whether non-admins can use /profile (admin only)");
@@ -246,6 +255,7 @@ public class DiscordNotifier : IDiscordNotifier
             removeTraitCommand.Build(),
             clearProfileCommand.Build(),
             profileCommand.Build(),
+            typicalCommand.Build(),
             toggleProfileCommand.Build(),
             toggleLanguageCommand.Build(),
             summaryCommand.Build(),
@@ -334,6 +344,13 @@ public class DiscordNotifier : IDiscordNotifier
             case "profile":
                 if (OnProfileCommand is not null)
                     await OnProfileCommand.Invoke(command);
+                else
+                    await command.RespondAsync("Bot is not fully initialized yet.");
+                break;
+
+            case "typical":
+                if (OnTypicalCommand is not null)
+                    await OnTypicalCommand.Invoke(command);
                 else
                     await command.RespondAsync("Bot is not fully initialized yet.");
                 break;

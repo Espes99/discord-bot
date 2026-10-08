@@ -158,6 +158,29 @@ public class MatchPlayer
 
     [JsonPropertyName("economy")]
     public PlayerEconomy? Economy { get; set; }
+
+    [JsonPropertyName("performance")]
+    public PlayerPerformance? Performance { get; set; }
+}
+
+// Riot's own evaluation; every level is nullable upstream
+public class PlayerPerformance
+{
+    [JsonPropertyName("ratings")]
+    public PerformanceRatings? Ratings { get; set; }
+}
+
+public class PerformanceRatings
+{
+    [JsonPropertyName("combat")]
+    public CombatRatings? Combat { get; set; }
+}
+
+public class CombatRatings
+{
+    // Trend: double_down, down, neutral, up, double_up
+    [JsonPropertyName("trades")]
+    public string? Trades { get; set; }
 }
 
 public class AbilityCasts
@@ -421,6 +444,34 @@ public class MatchKill
 
     [JsonPropertyName("weapon")]
     public KillWeapon? Weapon { get; set; }
+
+    // Where the victim died
+    [JsonPropertyName("location")]
+    public MapLocation? Location { get; set; }
+
+    // Everyone still alive at the moment of the kill
+    [JsonPropertyName("player_locations")]
+    public List<PlayerLocation>? PlayerLocations { get; set; }
+}
+
+public class MapLocation
+{
+    [JsonPropertyName("x")]
+    public int X { get; set; }
+
+    [JsonPropertyName("y")]
+    public int Y { get; set; }
+
+    public double DistanceTo(MapLocation other) => Math.Sqrt(Math.Pow(X - other.X, 2) + Math.Pow(Y - other.Y, 2));
+}
+
+public class PlayerLocation
+{
+    [JsonPropertyName("player")]
+    public KillPlayer? Player { get; set; }
+
+    [JsonPropertyName("location")]
+    public MapLocation? Location { get; set; }
 }
 
 public class KillPlayer

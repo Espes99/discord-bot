@@ -22,6 +22,11 @@ public class MatchHistoryEntry
 
     public string? Rank { get; init; }
 
+    // Null on entries saved before signals existed
+    public BehaviorSignals? Signals { get; init; }
+    public BehaviorSignals? LobbySignals { get; init; }
+    public string? RiotTradesTrend { get; init; }
+
     public static MatchHistoryEntry FromPerformanceResult(PerformanceResult result, string? rankOverride = null) => new()
     {
         MatchId = result.MatchData.Metadata.MatchId,
@@ -37,6 +42,9 @@ public class MatchHistoryEntry
         Kda = result.MatchPlayer.Stats.Kda,
         HeadshotPercent = result.MatchPlayer.Stats.HeadshotPercentage,
         Rating = result.Rating,
-        Rank = rankOverride ?? result.MatchPlayer.Tier?.Name
+        Rank = rankOverride ?? result.MatchPlayer.Tier?.Name,
+        Signals = result.Signals,
+        LobbySignals = result.LobbySignals,
+        RiotTradesTrend = result.MatchPlayer.Performance?.Ratings?.Combat?.Trades
     };
 }

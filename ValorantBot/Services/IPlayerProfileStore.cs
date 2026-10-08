@@ -10,7 +10,7 @@ public interface IPlayerProfileStore
     void RemoveManualTrait(string playerKey, string trait);
     IReadOnlyList<string> RemoveManualTraitsAt(string playerKey, IReadOnlyCollection<int> indices);
     bool ClearBioAndManualTraits(string playerKey);
-    void UpdateAutoTraits(string playerKey, List<string> traits);
+    void UpdateAutoTraits(string playerKey, List<AutoTrait> traits);
     bool IsProfileCommandPublic { get; }
     void SetProfileCommandPublic(bool isPublic);
     BotLanguage Language { get; }

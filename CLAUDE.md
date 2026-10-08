@@ -7,9 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 dotnet build                    # Build the solution
 dotnet run --project ValorantBot  # Run the bot
+dotnet test                     # Run ValorantBot.Tests (signals, trait derivation, profile migration)
 ```
-
-No tests exist yet.
 
 ## Project Overview
 
@@ -57,7 +56,9 @@ Tracked players are managed dynamically via `/track` and `/untrack` Discord comm
 
 ## Notes
 
-- Profile allusions: bio and manual traits are the pool, auto traits only fill in while all of those are on cooldown. Each trait has a 3-day cooldown tracked in `RoastPlanStore.TraitUses`. Profile content is fair game for roasts (the group adds it themselves); the prompt requires the trait to show up, tied to the match focus. The model reports the joke it made in the JSON `angle` field, and recent angles are sent back as "do not reuse" so the same trait gets new jokes
+- Auto traits: `BehaviorSignalExtractor` counts per-match signals for all 10 players (last alive, trades and isolated deaths from kill `player_locations`, first deaths, exit saves, etc.). Each `MatchHistoryEntry` stores the player's counts plus the summed lobby counts, so `ProfileTraitDeriver` judges rates against the lobby, match by match over the latest 5 judgeable matches (8 for rare events: clutch, plants, eco rifles). A trait enters at 3 hits and is dropped at 1 or fewer; in between a held trait stays (hysteresis, with eased thresholds), no extra state stored. One trait per category, max 6. Auto traits are `{Label, Evidence}`; old string entries in `player_profiles.json` load via `AutoTraitConverter`
+- `/typical name tag` is open to everyone and posts the player's auto traits with evidence publicly (not ephemeral, unlike `/profile`, and ignores the `/toggle-profile` flag)
+- Profile allusions: bio, manual traits and auto traits share one pool; an auto trait's evidence goes into the prompt. Each trait has a 3-day cooldown tracked in `RoastPlanStore.TraitUses`. Profile content is fair game for roasts (the group adds it themselves); the prompt requires the trait to show up, tied to the match focus. The model reports the joke it made in the JSON `angle` field, and recent angles are sent back as "do not reuse" so the same trait gets new jokes
 - Claude Sonnet 5.5 has adaptive thinking on by default, so responses start with thinking blocks. `MessageGenerator.SendAsync` only reads `TextContent` blocks (never `Content.First().ToString()`, which yields the type name), posts `Klarte ikke å parse responsen ;_; Error; <details>` if there is no text or the JSON is invalid, and adds `ThinkingTokenHeadroom` on top of each caller's text budget, since thinking counts toward `max_tokens`
 - Sonnet 5.5 rejects `thinking: disabled` and non-default `temperature`/`top_p`/`top_k` with a 400 error
 - `/toggle-language language:[English|Norsk]` (admin) sets a global flag persisted in `player_profiles.json`. All prompt material stays English; Norwegian only adds a rule line to the user message (never to the cached system prompt) plus Norwegian banned openers. The JSON fields `story`/`tone`/`form`/`angle` must stay English or rotation breaks. Embeds, fallbacks and command replies are always English

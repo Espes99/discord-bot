@@ -59,6 +59,7 @@ public class Worker(
         discord.OnClearProfileCommand += HandleClearProfileCommandAsync;
         discord.OnClearProfileButton += HandleClearProfileButtonAsync;
         discord.OnProfileCommand += HandleProfileCommandAsync;
+        discord.OnTypicalCommand += HandleTypicalCommandAsync;
         discord.OnToggleProfileCommand += HandleToggleProfileCommandAsync;
         discord.OnToggleLanguageCommand += HandleToggleLanguageCommandAsync;
         discord.OnSummaryCommand += HandleSummaryCommandAsync;
@@ -1233,12 +1234,52 @@ public class Worker(
             embed.AddField("Manual Traits", string.Join("\n", profile.ManualTraits.Select(t => $"- {t}")));
 
         if (profile.AutoTraits.Count > 0)
-            embed.AddField("Auto Traits", string.Join("\n", profile.AutoTraits.Select(t => $"- {t}")));
+            embed.AddField("Auto Traits", FormatAutoTraits(profile.AutoTraits));
 
         if (string.IsNullOrWhiteSpace(profile.Bio) && profile.ManualTraits.Count == 0 && profile.AutoTraits.Count == 0)
             embed.WithDescription("Profile exists but has no bio, traits, or auto traits yet.");
 
         await command.FollowupAsync(embed: embed.Build(), ephemeral: true);
+    }
+
+    private async Task HandleTypicalCommandAsync(SocketSlashCommand command)
+    {
+        await command.DeferAsync();
+
+        var name = command.Data.Options.First(o => o.Name == "name").Value.ToString()!;
+        var tag = command.Data.Options.First(o => o.Name == "tag").Value.ToString()!;
+
+        var tracked = ResolveTrackedPlayer(name, tag);
+        var key = tracked is not null ? StoreKey(tracked) : MatchTracker.PlayerKey(name, tag);
+
+        var profile = playerProfileStore.GetProfile(key);
+        if (profile is null && matchHistoryStore.GetHistory(key).Count > 0)
+        {
+            UpdateAutoTraits(key);
+            profile = playerProfileStore.GetProfile(key);
+        }
+
+        if (profile is not { AutoTraits.Count: > 0 })
+        {
+            await command.FollowupAsync($"Nothing typical about **{name}#{tag}** yet. Auto traits show up after a few tracked matches.");
+            return;
+        }
+
+        var embed = new EmbedBuilder()
+            .WithTitle($"Typical {name}#{tag}")
+            .WithDescription(FormatAutoTraits(profile.AutoTraits))
+            .WithColor(Color.Purple)
+            .WithTimestamp(DateTimeOffset.UtcNow)
+            .WithFooter("Based on recent tracked matches");
+
+        await command.FollowupAsync(embed: embed.Build());
+    }
+
+    private static string FormatAutoTraits(List<AutoTrait> traits)
+    {
+        var text = string.Join("\n", traits.Select(t => t.Evidence is null ? $"- {t.Label}" : $"- **{t.Label}**: {t.Evidence}"));
+        // Fits both an embed field (1024) and a description; Discord rejects anything longer
+        return text.Length > 1024 ? text[..1021] + "..." : text;
     }
 
     private async Task HandleSummaryCommandAsync(SocketSlashCommand command)
@@ -1360,7 +1401,8 @@ public class Worker(
     {
         var history = matchHistoryStore.GetHistory(playerKey);
         var summary = HistorySummarizer.Summarize(history);
-        var autoTraits = ProfileTraitDeriver.DeriveTraits(history, summary);
+        var current = playerProfileStore.GetProfile(playerKey)?.AutoTraits.Select(t => t.Label).ToList();
+        var autoTraits = ProfileTraitDeriver.DeriveTraits(history, summary, current);
         playerProfileStore.UpdateAutoTraits(playerKey, autoTraits);
     }
 

@@ -288,6 +288,8 @@ public class MessageGenerator(
         var about = owner is not null ? $" on {owner} (goes in their line)" : "";
         sb.AppendLine();
         sb.AppendLine($"BACKGROUND{about}, roast material that must show up in the message: \"{allusion.Text}\"");
+        if (allusion.Evidence is not null)
+            sb.AppendLine($"Evidence from their recent matches (use a number if it lands): {allusion.Evidence}");
         if (allusion.PreviousAngles.Count > 0)
             sb.AppendLine($"Angles already used for this, do not reuse: {string.Join(", ", allusion.PreviousAngles.Select(a => $"\"{a}\""))}");
     }
