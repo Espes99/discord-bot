@@ -69,6 +69,39 @@ public class AutoTraitTests
         Assert.DoesNotContain(traits, t => t.Label == "utility hoarder");
     }
 
+    // Hours ago keeps order explicit: higher = older
+    private static MatchHistoryEntry Match(int hoursAgo, bool bait) => new()
+    {
+        MatchId = $"m{hoursAgo}",
+        PlayedAt = DateTime.UtcNow.AddHours(-hoursAgo),
+        Signals = new BehaviorSignals { Rounds = 20, LostRounds = 10, LastAlive = bait ? 8 : 3, LastAliveLost = bait ? 7 : 1, NearbyTeammateDeaths = 8, TradesMade = bait ? 0 : 4, AbilityCasts = 30 },
+        LobbySignals = new BehaviorSignals { Rounds = 180, LostRounds = 90, LastAlive = 30, LastAliveLost = 15, NearbyTeammateDeaths = 60, TradesMade = 24, AbilityCasts = 270 }
+    };
+
+    private static bool HasBaiter(List<MatchHistoryEntry> history, params string[] held) =>
+        ProfileTraitDeriver.DeriveTraits(history, HistorySummarizer.Summarize(history), held).Any(t => t.Label == "baiter");
+
+    [Fact]
+    public void Baiter_enters_after_three_and_fades_after_five_clean()
+    {
+        var history = new List<MatchHistoryEntry> { Match(8, true), Match(7, true), Match(6, true) };
+        Assert.True(HasBaiter(history));
+
+        history.AddRange([Match(5, false), Match(4, false), Match(3, false), Match(2, false), Match(1, false)]);
+        Assert.False(HasBaiter(history, "baiter"));
+    }
+
+    [Fact]
+    public void Held_baiter_drops_at_one_hit_in_five_and_stays_at_two()
+    {
+        var oneHit = new List<MatchHistoryEntry> { Match(9, true), Match(8, true), Match(7, true), Match(5, true), Match(4, false), Match(3, false), Match(2, false), Match(1, false) };
+        Assert.False(HasBaiter(oneHit, "baiter"));
+
+        var twoHits = new List<MatchHistoryEntry> { Match(5, true), Match(4, false), Match(3, true), Match(2, false), Match(1, false) };
+        Assert.True(HasBaiter(twoHits, "baiter"));
+        Assert.False(HasBaiter(twoHits));
+    }
+
     [Fact]
     public void Legacy_string_traits_still_load()
     {

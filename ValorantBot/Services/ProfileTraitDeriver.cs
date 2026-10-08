@@ -8,11 +8,10 @@ public static class ProfileTraitDeriver
 {
     private const int MaxTraits = 6;
     private const int MinMatchesForStatTraits = 10;
-    private const int SignalWindow = 10;
-    private const int MinSignalMatches = 5;
-    // Traits already held stay until they clearly fade, so the list does not flicker between matches
+    // Enter at 3 hits in the window, drop at 1 or fewer; in between a held trait stays, so the list does not flicker
+    private const int EnterHits = 3;
+    private const int DropAtHits = 1;
     private const double HoldRatioEase = 0.85;
-    private const double HoldConsistencyEase = 0.75;
 
     private static readonly Dictionary<string, string> AgentRoles = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -106,8 +105,8 @@ public static class ProfileTraitDeriver
     }
 
     /// <summary>
-    /// Primary decides per-match consistency; Also and Guard are checked on the summed window,
-    /// since secondary rates are too sparse to judge match by match.
+    /// Primary is judged match by match over the latest Window judgeable matches; Also and Guard only gate entry,
+    /// on the summed window, since secondary rates are too sparse to judge per match.
     /// </summary>
     private sealed record SignalRule(
         string Label,
@@ -116,7 +115,8 @@ public static class ProfileTraitDeriver
         Func<S, S, int, string> Evidence,
         Condition[]? Also = null,
         Func<S, bool>? Guard = null,
-        double MinConsistency = 0.6,
+        // Rare events (clutches, plants) are absent from most matches, so a longer window before a miss means anything
+        int Window = 5,
         Func<List<MatchHistoryEntry>, double>? Boost = null);
 
     private static readonly Metric LastAliveRate = new(s => s.LastAlive, s => s.Rounds, 10);
@@ -147,7 +147,7 @@ public static class ProfileTraitDeriver
             new(ClutchRate, 2.0, Higher: true),
             (p, l, n) => $"{p.Clutches} clutches (1v2 or worse) over {n} matches, {Ratio(ClutchRate, p, l)}x the lobby rate",
             Guard: p => p.Clutches >= 3,
-            MinConsistency: 0.4),
+            Window: 8),
         new("first to die and never traded", "Entry",
             new(FirstDeathRate, 1.5, Higher: true),
             (p, l, n) => $"died first in {Pct(p.FirstDeaths, p.Rounds)} of rounds over {n} matches (lobby {Pct(l.FirstDeaths, l.Rounds)}); team traded only {Pct(p.DeathsTraded, p.Deaths)} of their deaths (lobby {Pct(l.DeathsTraded, l.Deaths)})",
@@ -169,43 +169,46 @@ public static class ProfileTraitDeriver
             new(PlantRate, 2.0, Higher: true),
             (p, l, n) => $"planted {p.Plants} spikes over {n} matches, {Ratio(PlantRate, p, l)}x the lobby rate",
             Guard: p => p.Plants >= 4,
-            MinConsistency: 0.4),
+            Window: 8),
         new("buys a rifle on the team's eco", "Economy",
             new(EcoRifleRate, 2.0, Higher: true),
             (p, l, n) => $"bought a rifle on {p.EcoRifleBuys} team eco rounds over {n} matches",
             Guard: p => p.EcoRifleBuys >= 3,
-            MinConsistency: 0.4),
+            Window: 8),
     ];
 
     private static void DeriveSignalTraits(List<MatchHistoryEntry> history, HashSet<string> held, List<Candidate> candidates)
     {
-        var window = history
+        var withSignals = history
             .Where(h => h.Signals is not null && h.LobbySignals is not null)
             .OrderByDescending(h => h.PlayedAt)
-            .Take(SignalWindow)
             .ToList();
-        if (window.Count < MinSignalMatches)
-            return;
-
-        var player = S.Sum(window.Select(h => h.Signals!));
-        var lobby = S.Sum(window.Select(h => h.LobbySignals!));
 
         foreach (var rule in SignalRules)
         {
-            var eased = held.Contains(rule.Label);
-            var judged = window.Where(h => rule.Primary.Metric.Rate(h.Signals!) is not null && rule.Primary.Metric.Rate(h.LobbySignals!) is not null).ToList();
-            if (judged.Count < MinSignalMatches)
+            // Matches the rule cannot judge (too few rounds, no positions) count as neither hit nor miss
+            var window = withSignals
+                .Where(h => rule.Primary.Metric.Rate(h.Signals!) is not null && rule.Primary.Metric.Rate(h.LobbySignals!) is not null)
+                .Take(rule.Window)
+                .ToList();
+            if (window.Count < EnterHits)
                 continue;
 
-            var consistency = (double)judged.Count(h => rule.Primary.Holds(h.Signals!, h.LobbySignals!, eased)) / judged.Count;
-            var minConsistency = eased ? rule.MinConsistency * HoldConsistencyEase : rule.MinConsistency;
-            if (consistency < minConsistency
-                || !rule.Primary.Holds(player, lobby, eased)
-                || rule.Also?.Any(c => !c.Holds(player, lobby, eased)) == true
-                || rule.Guard?.Invoke(player) == false)
+            var isHeld = held.Contains(rule.Label);
+            var hits = window.Count(h => rule.Primary.Holds(h.Signals!, h.LobbySignals!, isHeld));
+            var player = S.Sum(window.Select(h => h.Signals!));
+            var lobby = S.Sum(window.Select(h => h.LobbySignals!));
+
+            var keep = isHeld
+                ? hits > DropAtHits
+                : hits >= EnterHits
+                    && rule.Primary.Holds(player, lobby, eased: false)
+                    && rule.Also?.All(c => c.Holds(player, lobby, eased: false)) != false
+                    && rule.Guard?.Invoke(player) != false;
+            if (!keep)
                 continue;
 
-            var strength = rule.Primary.Strength(player, lobby) * consistency * (rule.Boost?.Invoke(window) ?? 1);
+            var strength = rule.Primary.Strength(player, lobby) * hits / window.Count * (rule.Boost?.Invoke(window) ?? 1);
             candidates.Add(new Candidate(new AutoTrait(rule.Label, rule.Evidence(player, lobby, window.Count)), rule.Category, strength));
         }
     }
