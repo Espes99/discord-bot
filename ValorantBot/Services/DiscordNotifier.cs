@@ -58,6 +58,7 @@ public class DiscordNotifier : IDiscordNotifier
 
     /// <inheritdoc />
     public event Func<SocketSlashCommand, Task>? OnToggleProfileCommand;
+    public event Func<SocketSlashCommand, Task>? OnToggleLanguageCommand;
 
     /// <inheritdoc />
     public event Func<SocketSlashCommand, Task>? OnSummaryCommand;
@@ -203,6 +204,17 @@ public class DiscordNotifier : IDiscordNotifier
             .WithName("toggle-profile")
             .WithDescription("Toggle whether non-admins can use /profile (admin only)");
 
+        var toggleLanguageCommand = new SlashCommandBuilder()
+            .WithName("toggle-language")
+            .WithDescription("Set the language of the bot's AI messages (admin only)")
+            .AddOption(new SlashCommandOptionBuilder()
+                .WithName("language")
+                .WithDescription("Language for the next messages")
+                .WithType(ApplicationCommandOptionType.String)
+                .WithRequired(true)
+                .AddChoice("English", nameof(BotLanguage.English))
+                .AddChoice("Norsk", nameof(BotLanguage.Norwegian)));
+
         var summaryCommand = new SlashCommandBuilder()
             .WithName("summary")
             .WithDescription("Summarize a player's recent matches (default 12)")
@@ -235,6 +247,7 @@ public class DiscordNotifier : IDiscordNotifier
             clearProfileCommand.Build(),
             profileCommand.Build(),
             toggleProfileCommand.Build(),
+            toggleLanguageCommand.Build(),
             summaryCommand.Build(),
             trackedPlayersCommand.Build()
         ]);
@@ -328,6 +341,13 @@ public class DiscordNotifier : IDiscordNotifier
             case "toggle-profile":
                 if (OnToggleProfileCommand is not null)
                     await OnToggleProfileCommand.Invoke(command);
+                else
+                    await command.RespondAsync("Bot is not fully initialized yet.");
+                break;
+
+            case "toggle-language":
+                if (OnToggleLanguageCommand is not null)
+                    await OnToggleLanguageCommand.Invoke(command);
                 else
                     await command.RespondAsync("Bot is not fully initialized yet.");
                 break;

@@ -15,6 +15,7 @@ public class MessageGenerator(
     AnthropicClient client,
     IMessageHistoryStore messageHistory,
     RoastPlanner planner,
+    IPlayerProfileStore profileStore,
     ILogger<MessageGenerator> logger) : IMessageGenerator
 {
     private static string StoreKey(TrackedPlayer player) =>
@@ -72,6 +73,14 @@ public class MessageGenerator(
         - Name both ranks. MAJOR promotion: act like they won Worlds. MAJOR demotion: a tragedy of epic proportions.
         """;
 
+    // Goes in the user message so the cached system prompt stays identical across languages; JSON fields stay
+    // English because tones are matched against Voices and angles are fed back.
+    private const string NorwegianRule = """
+        - Language: write the message in Norwegian (bokmål), the way young Norwegian gamers actually talk; English gaming slang mixed in is fine. Agent, weapon, ability, map and rank names and stat abbreviations (ACS, KDA, HS%, ADR) stay in English exactly as given. English BACKGROUND notes get twisted into Norwegian, never quoted. "story", "tone", "form" and "angle" stay in English.
+        """;
+
+    private string LanguageRule() => profileStore.Language == BotLanguage.Norwegian ? NorwegianRule : "";
+
     private static readonly JsonElement ChoiceSchema = JsonDocument.Parse("""
         {
           "type": "object",
@@ -113,6 +122,7 @@ public class MessageGenerator(
         sb.AppendLine($"- Length: {SentenceRange(plan.MinSentences, plan.MaxSentences)}");
         sb.AppendLine("- Emojis: 0 to 2, your call");
         sb.AppendLine($"- Do not open with: {string.Join(", ", plan.Recent.BannedOpeners)}");
+        sb.AppendLine(LanguageRule());
 
         try
         {
@@ -164,6 +174,7 @@ public class MessageGenerator(
         sb.AppendLine($"- Length: {SentenceRange(plan.MinSentences, plan.MaxSentences)}");
         sb.AppendLine("- Emojis: 0 to 2, your call");
         sb.AppendLine($"- Do not open with: {string.Join(", ", plan.Recent.BannedOpeners)}");
+        sb.AppendLine(LanguageRule());
 
         try
         {
@@ -204,6 +215,7 @@ public class MessageGenerator(
             PLAN
             - Voice: your call, pick what fits. Ideas: {string.Join("; ", RoastPlanner.ToneIdeas(4))}
             - Do not open with: "{playerName}", "Alright", "Ladies and gentlemen"
+            {LanguageRule()}
             """;
 
         try
@@ -249,6 +261,7 @@ public class MessageGenerator(
             PLAN
             - Voice: your call, pick what fits. Ideas: {string.Join("; ", RoastPlanner.ToneIdeas(4))}
             - Do not open with: "{playerName}", "Alright", "Ladies and gentlemen"
+            {LanguageRule()}
             """;
 
         try

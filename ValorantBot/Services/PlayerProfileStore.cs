@@ -17,10 +17,16 @@ public class PlayerProfileStore : IPlayerProfileStore
     private readonly object _lock = new();
     private Dictionary<string, PlayerProfile> _profiles = new();
     private bool _profileCommandPublic = false;
+    private BotLanguage _language = BotLanguage.English;
 
     public bool IsProfileCommandPublic
     {
         get { lock (_lock) { return _profileCommandPublic; } }
+    }
+
+    public BotLanguage Language
+    {
+        get { lock (_lock) { return _language; } }
     }
 
     public PlayerProfileStore(ILogger<PlayerProfileStore> logger)
@@ -144,6 +150,15 @@ public class PlayerProfileStore : IPlayerProfileStore
         }
     }
 
+    public void SetLanguage(BotLanguage language)
+    {
+        lock (_lock)
+        {
+            _language = language;
+            Save();
+        }
+    }
+
     public bool MigrateKey(string oldKey, string newKey)
     {
         lock (_lock)
@@ -195,6 +210,7 @@ public class PlayerProfileStore : IPlayerProfileStore
                 var data = JsonSerializer.Deserialize<ProfileData>(json, JsonOptions)!;
                 _profiles = data.Profiles;
                 _profileCommandPublic = data.ProfileCommandPublic;
+                _language = data.Language;
                 _logger.LogInformation("Loaded profiles for {Count} player(s)", _profiles.Count);
                 return;
             }
@@ -218,7 +234,8 @@ public class PlayerProfileStore : IPlayerProfileStore
             var data = new ProfileData
             {
                 Profiles = _profiles,
-                ProfileCommandPublic = _profileCommandPublic
+                ProfileCommandPublic = _profileCommandPublic,
+                Language = _language
             };
             var json = JsonSerializer.Serialize(data, JsonOptions);
             File.WriteAllText(_filePath, json);
@@ -233,5 +250,6 @@ public class PlayerProfileStore : IPlayerProfileStore
     {
         public Dictionary<string, PlayerProfile> Profiles { get; set; } = new();
         public bool ProfileCommandPublic { get; set; } = true;
+        public BotLanguage Language { get; set; } = BotLanguage.English;
     }
 }

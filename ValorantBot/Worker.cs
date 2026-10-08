@@ -60,6 +60,7 @@ public class Worker(
         discord.OnClearProfileButton += HandleClearProfileButtonAsync;
         discord.OnProfileCommand += HandleProfileCommandAsync;
         discord.OnToggleProfileCommand += HandleToggleProfileCommandAsync;
+        discord.OnToggleLanguageCommand += HandleToggleLanguageCommandAsync;
         discord.OnSummaryCommand += HandleSummaryCommandAsync;
         discord.OnTrackedPlayersCommand += HandleTrackedPlayersCommandAsync;
         await discord.StartAsync(stoppingToken);
@@ -1336,6 +1337,23 @@ public class Worker(
         var stateText = newState ? "enabled" : "disabled";
         logger.LogInformation("{User} toggled /profile command to {State}", command.User.Username, stateText);
         await command.FollowupAsync($"/profile command is now **{stateText}** for non-admins.", ephemeral: true);
+    }
+
+    private async Task HandleToggleLanguageCommandAsync(SocketSlashCommand command)
+    {
+        await command.DeferAsync(ephemeral: true);
+
+        if (!IsAuthorized(command))
+        {
+            await command.FollowupAsync("You don't have permission to use this command.", ephemeral: true);
+            return;
+        }
+
+        var language = Enum.Parse<BotLanguage>(command.Data.Options.First(o => o.Name == "language").Value.ToString()!);
+        playerProfileStore.SetLanguage(language);
+
+        logger.LogInformation("{User} set bot language to {Language}", command.User.Username, language);
+        await command.FollowupAsync($"Bot messages are now in **{language}**.", ephemeral: true);
     }
 
     private void UpdateAutoTraits(string playerKey)
