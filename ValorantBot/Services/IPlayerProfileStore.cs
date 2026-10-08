@@ -11,6 +11,7 @@ public interface IPlayerProfileStore
     IReadOnlyList<string> RemoveManualTraitsAt(string playerKey, IReadOnlyCollection<int> indices);
     bool ClearBioAndManualTraits(string playerKey);
     void UpdateAutoTraits(string playerKey, List<AutoTrait> traits);
+    void UpdateSquadTraits(string playerKey, List<SquadTrait> traits);
     bool IsProfileCommandPublic { get; }
     void SetProfileCommandPublic(bool isPublic);
     BotLanguage Language { get; }

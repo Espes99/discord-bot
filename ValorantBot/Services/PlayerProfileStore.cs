@@ -141,6 +141,18 @@ public class PlayerProfileStore : IPlayerProfileStore
         }
     }
 
+    public void UpdateSquadTraits(string playerKey, List<SquadTrait> traits)
+    {
+        lock (_lock)
+        {
+            var profile = GetOrCreateProfile(playerKey);
+            if (profile.SquadTraits.Count == 0 && traits.Count == 0)
+                return;
+            profile.SquadTraits = traits;
+            Save();
+        }
+    }
+
     public void SetProfileCommandPublic(bool isPublic)
     {
         lock (_lock)

@@ -27,4 +27,5 @@ public class PerformanceResult
 
     public BehaviorSignals? Signals { get; init; }
     public BehaviorSignals? LobbySignals { get; init; }
+    public Dictionary<string, PairSignals>? Teammates { get; init; }
 }

@@ -1401,9 +1401,20 @@ public class Worker(
     {
         var history = matchHistoryStore.GetHistory(playerKey);
         var summary = HistorySummarizer.Summarize(history);
-        var current = playerProfileStore.GetProfile(playerKey)?.AutoTraits.Select(t => t.Label).ToList();
-        var autoTraits = ProfileTraitDeriver.DeriveTraits(history, summary, current);
+        var profile = playerProfileStore.GetProfile(playerKey);
+        var autoTraits = ProfileTraitDeriver.DeriveTraits(history, summary, profile?.AutoTraits.Select(t => t.Label).ToList());
         playerProfileStore.UpdateAutoTraits(playerKey, autoTraits);
+
+        // Store keys are puuids once resolved; players without one cannot be matched to teammates
+        var tracked = trackedPlayerStore.GetAll()
+            .Where(p => !string.IsNullOrEmpty(p.Puuid))
+            .DistinctBy(p => p.Puuid!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(p => p.Puuid!, p => $"{p.Name}#{p.Tag}", StringComparer.OrdinalIgnoreCase);
+        if (tracked.ContainsKey(playerKey))
+        {
+            var squadTraits = SquadTraitDeriver.Derive(playerKey, history, tracked, profile?.SquadTraits.Select(t => t.Id).ToList());
+            playerProfileStore.UpdateSquadTraits(playerKey, squadTraits);
+        }
     }
 
     /// <summary>

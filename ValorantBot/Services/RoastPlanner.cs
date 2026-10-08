@@ -150,6 +150,7 @@ public class RoastPlanner(IRoastPlanStore planStore, IPlayerProfileStore profile
 
         RoastAllusion? allusion = null;
         SquadMemberPlan? owner = null;
+        var present = results.Select(r => r.MatchPlayer.Puuid).ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (Rng.NextDouble() < SquadAllusionChance)
         {
             // Spread trait jokes around the squad, favouring the roles that get the most text
@@ -161,7 +162,7 @@ public class RoastPlanner(IRoastPlanStore planStore, IPlayerProfileStore profile
             {
                 owner = PickWeighted(pool, m => AllusionRoleWeight(m.Role));
                 pool.Remove(owner);
-                allusion = PickAllusion(owner.StoreKey);
+                allusion = PickAllusion(owner.StoreKey, present);
             }
             if (allusion is null)
                 owner = null;
@@ -282,9 +283,10 @@ public class RoastPlanner(IRoastPlanStore planStore, IPlayerProfileStore profile
 
     /// <summary>
     /// Bio, manual traits and auto traits share one pool; each item cools down for TraitCooldown after use.
+    /// In a squad roast, squad traits join the pool when every mate they name is in the stack.
     /// Less-used items are favoured, and the angles already used for the pick go along so the joke changes.
     /// </summary>
-    private RoastAllusion? PickAllusion(string storeKey)
+    private RoastAllusion? PickAllusion(string storeKey, IReadOnlySet<string>? stack = null)
     {
         var profile = profileStore.GetProfile(storeKey);
         if (profile is null)
@@ -301,6 +303,11 @@ public class RoastPlanner(IRoastPlanStore planStore, IPlayerProfileStore profile
             evidence.TryAdd(trait, null);
         foreach (var trait in profile.AutoTraits)
             evidence.TryAdd(trait.Label, trait.Evidence);
+        if (stack is not null)
+        {
+            foreach (var trait in profile.SquadTraits.Where(t => t.MatePuuids.All(stack.Contains)))
+                evidence.TryAdd(trait.Label, trait.Evidence);
+        }
 
         var pool = evidence.Keys.Where(t => !cooling.Contains(t)).ToList();
         if (pool.Count == 0)

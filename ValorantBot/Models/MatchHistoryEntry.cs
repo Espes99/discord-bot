@@ -26,6 +26,10 @@ public class MatchHistoryEntry
     public BehaviorSignals? Signals { get; init; }
     public BehaviorSignals? LobbySignals { get; init; }
     public string? RiotTradesTrend { get; init; }
+    // Keyed by teammate puuid; tracked mates are compared with the randoms in the same matches
+    public Dictionary<string, PairSignals>? Teammates { get; init; }
+    public int TierId { get; init; }
+    public double PartyRrPenalty { get; init; }
 
     public static MatchHistoryEntry FromPerformanceResult(PerformanceResult result, string? rankOverride = null) => new()
     {
@@ -45,6 +49,10 @@ public class MatchHistoryEntry
         Rank = rankOverride ?? result.MatchPlayer.Tier?.Name,
         Signals = result.Signals,
         LobbySignals = result.LobbySignals,
-        RiotTradesTrend = result.MatchPlayer.Performance?.Ratings?.Combat?.Trades
+        RiotTradesTrend = result.MatchPlayer.Performance?.Ratings?.Combat?.Trades,
+        Teammates = result.Teammates,
+        TierId = result.MatchPlayer.Tier?.Id ?? 0,
+        PartyRrPenalty = result.MatchData.Metadata.PartyRrPenaltys?
+            .FirstOrDefault(p => string.Equals(p.PartyId, result.MatchPlayer.PartyId, StringComparison.OrdinalIgnoreCase))?.Penalty ?? 0
     };
 }
