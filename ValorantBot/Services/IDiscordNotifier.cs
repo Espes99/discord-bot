@@ -69,6 +69,11 @@ public interface IDiscordNotifier : IAsyncDisposable
     event Func<SocketSlashCommand, Task>? OnProfileCommand;
 
     /// <summary>
+    /// Raised when a user invokes the /typical slash command. Open to everyone.
+    /// </summary>
+    event Func<SocketSlashCommand, Task>? OnTypicalCommand;
+
+    /// <summary>
     /// Raised when a user invokes the /toggle-profile slash command.
     /// </summary>
     event Func<SocketSlashCommand, Task>? OnToggleProfileCommand;
