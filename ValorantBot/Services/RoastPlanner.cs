@@ -84,6 +84,8 @@ public class RoastPlanner(IRoastPlanStore planStore, IPlayerProfileStore profile
         "the player's name", "Alright", "Ladies and gentlemen", "Case file", "Well well", "Ah", "Oh", "So"
     ];
 
+    private static readonly string[] NorwegianBannedOpeners = ["Altså", "Jaja", "Nei vel", "Herregud", "Oi", "Nå"];
+
     public RoastPlan PlanSolo(PerformanceResult result, PlayerHistorySummary? history, RankChangeInfo? rankChange, string storeKey)
     {
         var records = planStore.GetPlayerRecords(storeKey);
@@ -325,13 +327,15 @@ public class RoastPlanner(IRoastPlanStore planStore, IPlayerProfileStore profile
         _ => 0.5
     };
 
-    private static List<string> BannedOpeners(IEnumerable<string?> recentOpeners, string? playerName)
+    private List<string> BannedOpeners(IEnumerable<string?> recentOpeners, string? playerName)
     {
         var banned = AlwaysBannedOpeners.Select(o => $"\"{o}\"").ToList();
         if (playerName is not null)
             banned[0] = $"\"{playerName}\"";
         else
             banned[0] = AlwaysBannedOpeners[0];
+        if (profileStore.Language == BotLanguage.Norwegian)
+            banned.AddRange(NorwegianBannedOpeners.Select(o => $"\"{o}\""));
         banned.AddRange(recentOpeners.Where(o => !string.IsNullOrWhiteSpace(o)).TakeLast(RecentOpenerWindow).Select(o => $"\"{o}\""));
         return banned;
     }

@@ -7,3 +7,9 @@ public class PlayerProfile
     public List<string> AutoTraits { get; set; } = [];
     public DateTime LastAutoTraitUpdate { get; set; }
 }
+
+public enum BotLanguage
+{
+    English,
+    Norwegian
+}

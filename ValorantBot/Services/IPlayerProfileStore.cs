@@ -13,5 +13,7 @@ public interface IPlayerProfileStore
     void UpdateAutoTraits(string playerKey, List<string> traits);
     bool IsProfileCommandPublic { get; }
     void SetProfileCommandPublic(bool isPublic);
+    BotLanguage Language { get; }
+    void SetLanguage(BotLanguage language);
     bool MigrateKey(string oldKey, string newKey);
 }

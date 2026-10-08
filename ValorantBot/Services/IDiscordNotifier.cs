@@ -74,6 +74,11 @@ public interface IDiscordNotifier : IAsyncDisposable
     event Func<SocketSlashCommand, Task>? OnToggleProfileCommand;
 
     /// <summary>
+    /// Raised when a user invokes the /toggle-language slash command.
+    /// </summary>
+    event Func<SocketSlashCommand, Task>? OnToggleLanguageCommand;
+
+    /// <summary>
     /// Raised when a user invokes the /summary slash command.
     /// </summary>
     event Func<SocketSlashCommand, Task>? OnSummaryCommand;
